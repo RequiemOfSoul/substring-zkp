@@ -1,5 +1,7 @@
 #[warn(non_snake_case)]
 mod circuit;
+mod circuit_extend;
+mod params;
 mod utils;
 mod witness;
 
@@ -17,10 +19,10 @@ use ckb_groth16::{
 fn main() {
     let rng = &mut test_rng();
 
-    let a = "a".to_string();
-    let b = "b".to_string();
+    let prefix = "a".to_string();
+    let suffix = "b".to_string();
     let secret = "secret".to_string();
-    let (c, public_input) = generate_circuit_instance(a, b, secret, 32);
+    let (c, public_input) = generate_circuit_instance(prefix, suffix, secret, 32);
 
     let s_start = Instant::now();
     let params = generate_random_parameters::<E, _, _>(c.clone(), rng).unwrap();

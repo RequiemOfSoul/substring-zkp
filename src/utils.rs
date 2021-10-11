@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 pub fn pack_bits_to_element<F: PrimeField, CS: ConstraintSystem<F>>(
     mut cs: CS,
     mut bits: Vec<Boolean>,
-) -> Result<Vec<Boolean>, SynthesisError> {
+) -> Result<(Vec<Boolean>, AllocatedFr<F>), SynthesisError> {
     bits.chunks_mut(8).for_each(|bit| bit.reverse());
     bits.truncate(F::Params::CAPACITY as usize);
     assert!(
@@ -43,29 +43,29 @@ pub fn pack_bits_to_element<F: PrimeField, CS: ConstraintSystem<F>>(
 
     bits.resize(256, Boolean::Constant(false));
     bits.chunks_mut(8).for_each(|bit| bit.reverse());
-    Ok(bits)
+    Ok((bits, data_packed))
 }
 
 pub fn generate_circuit_instance(
-    a: String,
-    b: String,
+    prefix: String,
+    suffix: String,
     secret: String,
     _string_length: usize,
 ) -> (SecretStringCircuit, Vec<Fr>) {
-    assert!(a.len() <= 64);
+    assert!(prefix.len() <= 64);
     assert!(secret.len() <= 32);
-    assert!(b.len() <= 512);
+    assert!(suffix.len() <= 512);
 
-    let mut a_bytes = a.into_bytes();
+    let mut a_bytes = prefix.into_bytes();
     a_bytes.resize(64, 0);
-    let mut b_bytes = b.into_bytes();
+    let mut b_bytes = suffix.into_bytes();
     b_bytes.resize(512, 0);
     let mut secret_bytes = secret.into_bytes();
     secret_bytes.resize(32, 0);
 
-    a_bytes[31] &= 0x1f;
-    b_bytes[31] &= 0x1f;
-    secret_bytes[31] &= 0x1f;
+    // a_bytes[31] &= 0x1f;
+    // b_bytes[31] &= 0x1f;
+    // secret_bytes[31] &= 0x1f;
 
     let mut h = Sha256::new();
     h.update(&secret_bytes);

@@ -1,50 +1,41 @@
 #[allow(clippy::useless_attribute)]
-use ark_ff::{FpParameters, PrimeField};
+use ark_ff::{BitIteratorBE, PrimeField};
 use ark_std::ops::Deref;
 
-pub struct CircuitString<F: PrimeField> {
+#[derive(Clone, Debug)]
+pub struct StringWitness<F: PrimeField> {
     bytes: Vec<u8>,
     frs: Vec<F>,
     length: usize,
 }
 
-impl<F: PrimeField> CircuitString<F> {
-    fn into_vec(self) -> Vec<u8> {
-        self.bytes
-    }
-    fn into_frs(self) -> Vec<F> {
-        self.frs
-    }
-}
-
-impl<F: PrimeField> From<(String, usize)> for CircuitString<F> {
-    fn from(s: (String, usize)) -> Self {
-        let cap = F::Params::CAPACITY as usize;
-        let length = if s.0.len() % cap != 0 {
-            s.0.len() / cap + 1
-        } else {
-            s.0.len() / cap
-        };
-        assert!(
-            length * cap > s.1 * 8,
-            "The length of the string exceeds the specified length."
-        );
-        let bytes = s.0.into_bytes();
-        let bits = from_be_bytes(&bytes);
-        let frs = le_bit_vector_into_field_element(&bits);
-        CircuitString {
-            bytes,
-            frs: vec![frs],
-            length,
-        }
-    }
-}
-
-impl<F: PrimeField> Deref for CircuitString<F> {
+impl<F: PrimeField> Deref for StringWitness<F> {
     type Target = [u8];
 
     fn deref(&self) -> &Self::Target {
         &*self.bytes
+    }
+}
+
+impl<F: PrimeField> StringWitness<F> {
+    fn get_vec(&self) -> &[u8] {
+        &self.bytes
+    }
+    fn get_frs(&self) -> &[F] {
+        &self.frs
+    }
+}
+
+impl<F: PrimeField> From<String> for StringWitness<F> {
+    fn from(s: String) -> Self {
+        let bytes = s.into_bytes();
+        let bits = from_be_bytes(&bytes);
+        let frs = le_bit_vector_into_field_element(&bits);
+        StringWitness {
+            bytes,
+            frs: vec![frs],
+            length: 1,
+        }
     }
 }
 
@@ -70,4 +61,12 @@ pub fn le_bit_vector_into_field_element<F: PrimeField>(bits: &[bool]) -> F {
         base = base.double();
     }
     fe
+}
+
+pub fn append_be_fixed_width<P: PrimeField>(content: &mut Vec<bool>, x: &P, width: usize) {
+    let mut bits: Vec<bool> = BitIteratorBE::new(x.into_repr()).collect();
+    bits.reverse();
+    bits.resize(width, false);
+    bits.reverse();
+    content.extend(bits);
 }
