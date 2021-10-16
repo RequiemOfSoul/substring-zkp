@@ -1,43 +1,134 @@
-#[allow(clippy::useless_attribute)]
+use crate::circuit::SecretStringCircuit;
+use crate::params::{PREFIX_FR_LENGTH, SECRET_FR_LENGTH, SUFFIX_FR_LENGTH};
 use ark_ff::{BitIteratorBE, PrimeField};
-use ark_std::ops::Deref;
+#[allow(clippy::useless_attribute)]
+use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug)]
-pub struct StringWitness<F: PrimeField> {
-    bytes: Vec<u8>,
-    frs: Vec<F>,
-    length: usize,
+pub struct SecretWitness<F: PrimeField> {
+    // (padding, length)
+    prefix: (Vec<F>, usize),
+    secret: (Vec<F>, usize),
+    suffix: (Vec<F>, usize),
+    pub secret_commitment: Option<F>,
+    pub message_hash: Option<F>,
 }
 
-impl<F: PrimeField> Deref for StringWitness<F> {
-    type Target = [u8];
+impl<F: PrimeField> SecretWitness<F> {
+    fn generate_witness(secret: String, message: String) -> SecretWitness<F> {
+        let v = message.split(&message).collect::<Vec<&str>>();
+        let prefix = v.first().unwrap().to_string().into_bytes();
+        let suffix = v.last().unwrap().to_string().into_bytes();
 
-    fn deref(&self) -> &Self::Target {
-        &*self.bytes
+        let mut secret_witness = SecretWitness::default();
+        secret_witness
+            .absorb_prefix(&prefix)
+            .absorb_secret(secret.as_ref())
+            .absorb_suffix(&suffix)
+            .finalize_hash(&secret, &message);
+
+        secret_witness
+    }
+
+    fn into_circuit_instance(self) -> SecretStringCircuit<F> {
+        SecretStringCircuit {
+            prefix_padding: None,
+            prefix_length: None,
+            secret_padding: None,
+            secret_length: None,
+            suffix_padding: None,
+            suffix_length: None,
+            secret: None,
+            message: None,
+            secret_hash: None,
+            message_hash: None,
+            a_bytes: None,
+            b_bytes: None,
+            secret_bytes: None,
+            secret_commitment: None,
+            all_string_commitment: None,
+        }
+    }
+
+    fn get_prefix(&self) -> &[F] {
+        &self.prefix.0
+    }
+
+    fn get_secret(&self) -> &[F] {
+        &self.secret.0
+    }
+
+    fn get_suffix(&self) -> &[F] {
+        &self.suffix.0
     }
 }
 
-impl<F: PrimeField> StringWitness<F> {
-    fn get_vec(&self) -> &[u8] {
-        &self.bytes
-    }
-    fn get_frs(&self) -> &[F] {
-        &self.frs
-    }
-}
-
-impl<F: PrimeField> From<String> for StringWitness<F> {
-    fn from(s: String) -> Self {
-        let bytes = s.into_bytes();
-        let bits = from_be_bytes(&bytes);
-        let frs = le_bit_vector_into_field_element(&bits);
-        StringWitness {
-            bytes,
-            frs: vec![frs],
-            length: 1,
+impl<F: PrimeField> Default for SecretWitness<F> {
+    fn default() -> Self {
+        SecretWitness {
+            prefix: (vec![Default::default(); PREFIX_FR_LENGTH], 0),
+            secret: (vec![Default::default(); SECRET_FR_LENGTH], 0),
+            suffix: (vec![Default::default(); SUFFIX_FR_LENGTH], 0),
+            secret_commitment: None,
+            message_hash: None,
         }
     }
 }
+
+impl<F: PrimeField> SecretWitness<F> {
+    fn absorb_prefix(&mut self, prefix: &[u8]) -> &mut Self {
+        let length = prefix.len();
+        let mut split_fe_vec = prefix
+            .chunks(31)
+            .map(|part| F::read(part).expect("pack hash as field element"))
+            .collect::<Vec<_>>();
+        split_fe_vec.resize(PREFIX_FR_LENGTH, F::zero());
+        self.prefix = (split_fe_vec, length);
+        self
+    }
+
+    fn absorb_secret(&mut self, secret: &[u8]) -> &mut Self {
+        let length = secret.len();
+        let mut split_fe_vec = secret
+            .chunks(31)
+            .map(|part| F::read(part).expect("pack hash as field element"))
+            .collect::<Vec<_>>();
+        split_fe_vec.resize(SECRET_FR_LENGTH, F::zero());
+        self.secret = (split_fe_vec, length);
+        self
+    }
+
+    fn absorb_suffix(&mut self, suffix: &[u8]) -> &mut Self {
+        let length = suffix.len();
+        let mut split_fe_vec = suffix
+            .chunks(31)
+            .map(|part| F::read(part).expect("pack hash as field element"))
+            .collect::<Vec<_>>();
+        split_fe_vec.resize(SUFFIX_FR_LENGTH, F::zero());
+        self.suffix = (split_fe_vec, length);
+        self
+    }
+
+    fn finalize_hash(&mut self, secret: impl AsRef<[u8]>, message: impl AsRef<[u8]>) {
+        let mut h = Sha256::new();
+        h.update(&secret);
+        let secret_commitment = h.finalize().to_vec();
+
+        let mut h = Sha256::new();
+        h.update(&message);
+        let signature_msg_hash = h.finalize().to_vec();
+
+        self.secret_commitment =
+            Some(F::read(&*secret_commitment).expect("packed secret commitment error"));
+        self.message_hash =
+            Some(F::read(&*signature_msg_hash).expect("packed signature message hash error"));
+    }
+}
+
+//
+// fn split_padding_str<T: AsRef<str>>(s: Vec<T>) -> Vec<u8> {
+//     s.split()
+// }
 
 pub fn from_be_bytes(bytes: &[u8]) -> Vec<bool> {
     let mut bits = vec![];
@@ -70,3 +161,6 @@ pub fn append_be_fixed_width<P: PrimeField>(content: &mut Vec<bool>, x: &P, widt
     bits.reverse();
     content.extend(bits);
 }
+
+#[test]
+fn test_secret_witness() {}

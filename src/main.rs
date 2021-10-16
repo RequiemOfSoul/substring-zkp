@@ -11,12 +11,16 @@ use std::time::Instant;
 
 // use ark_bls12_381::{Bls12_381 as E, Fr};
 use crate::utils::generate_circuit_instance;
-use ark_bn254::Bn254 as E;
+use ark_bn254::{Bn254 as E, Fr};
+use ark_ff::FpParameters;
+use ark_ff::PrimeField;
 use ckb_groth16::{
     create_random_proof, generate_random_parameters, verifier::prepare_verifying_key, verify_proof,
 };
 
 fn main() {
+    println!("CAPACITY:{}", <Fr as PrimeField>::Params::CAPACITY);
+    println!("MODULUS_BITS:{}", <Fr as PrimeField>::Params::MODULUS_BITS);
     let rng = &mut test_rng();
 
     let prefix = "a".to_string();
