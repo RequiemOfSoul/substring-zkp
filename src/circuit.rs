@@ -2,9 +2,8 @@ use crate::circuit_extend::{CircuitByte, CircuitString};
 use crate::circuit_extend::{CircuitNum, ExtendFunction};
 use crate::params::{
     LENGTH_REPR_BIT_WIDTH, MAX_HASH_PREIMAGE_BIT_WIDTH, MAX_HASH_PREIMAGE_LENGTH,
-    MAX_PREFIX_BIT_WIDTH, MAX_PREFIX_LENGTH, MAX_SECRET_BIT_WIDTH, MAX_SECRET_LENGTH,
-    MAX_SUFFIX_LENGTH, MIN_HASH_PREIMAGE_LENGTH, MIN_PREFIX_BIT_WIDTH, MIN_PREFIX_LENGTH,
-    MIN_SECRET_BIT_WIDTH, MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH,
+    MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MAX_SUFFIX_LENGTH, MIN_HASH_PREIMAGE_LENGTH,
+    MIN_PREFIX_LENGTH, MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH,
 };
 use crate::utils::pack_bits_to_element;
 use ark_ff::{FpParameters, PrimeField};
@@ -138,12 +137,12 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
     let mut selecting_string = Vec::with_capacity(MAX_HASH_PREIMAGE_LENGTH);
 
     // first section
-    for i in 0..MIN_PREFIX_BIT_WIDTH {
+    for i in 0..MIN_PREFIX_LENGTH {
         selecting_string.push(a[i].clone());
     }
 
     // second section
-    for i in MIN_PREFIX_BIT_WIDTH..MIN_PREFIX_BIT_WIDTH + MIN_SECRET_BIT_WIDTH {
+    for i in MIN_PREFIX_LENGTH..MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH {
         let nth = CircuitNum::from_fe_with_known_length(
             cs.ns(|| format!("Second section:{}th", i)),
             || Ok(F::from(i as u128)),
@@ -181,7 +180,7 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
     }
 
     // third section
-    for i in MIN_PREFIX_BIT_WIDTH + MIN_SECRET_BIT_WIDTH..MAX_PREFIX_BIT_WIDTH {
+    for i in MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH..MAX_PREFIX_LENGTH {
         let nth = CircuitNum::from_fe_with_known_length(
             cs.ns(|| format!("Third section:{}th", i)),
             || Ok(F::from(i as u128)),
@@ -245,7 +244,7 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
     }
 
     // fourth section
-    for i in MAX_PREFIX_BIT_WIDTH..MAX_PREFIX_BIT_WIDTH + MAX_SECRET_BIT_WIDTH {
+    for i in MAX_PREFIX_LENGTH..MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH {
         let nth = CircuitNum::from_fe_with_known_length(
             cs.ns(|| format!("Fourth section:{}th", i)),
             || Ok(F::from(i as u128)),

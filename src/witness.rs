@@ -16,7 +16,7 @@ pub struct SecretWitness<F: PrimeField> {
 
 impl<F: PrimeField> SecretWitness<F> {
     pub fn generate_witness(secret: String, message: String) -> SecretWitness<F> {
-        let split_message = message.split(&message).collect::<Vec<&str>>();
+        let split_message = message.split(&secret).collect::<Vec<&str>>();
         let prefix = split_message
             .first()
             .expect("Secret don't split message")
@@ -32,7 +32,7 @@ impl<F: PrimeField> SecretWitness<F> {
         let mut secret_witness = SecretWitness::default();
         secret_witness
             .absorb_prefix(&prefix)
-            .absorb_secret(secret.as_ref())
+            .absorb_secret(secret.as_bytes())
             .absorb_suffix(&suffix)
             .finalize_hash(&secret, &message);
 
@@ -93,7 +93,7 @@ impl<F: PrimeField> SecretWitness<F> {
         let length = prefix.len();
         let mut split_fe_vec = prefix
             .chunks(31)
-            .map(|part| F::read(part).expect("pack hash as field element"))
+            .map(part_string_padding)
             .collect::<Vec<_>>();
         split_fe_vec.resize(PREFIX_FR_LENGTH, F::zero());
         self.prefix = (split_fe_vec, length);
@@ -104,7 +104,7 @@ impl<F: PrimeField> SecretWitness<F> {
         let length = secret.len();
         let mut split_fe_vec = secret
             .chunks(31)
-            .map(|part| F::read(part).expect("pack hash as field element"))
+            .map(part_string_padding)
             .collect::<Vec<_>>();
         split_fe_vec.resize(SECRET_FR_LENGTH, F::zero());
         self.secret = (split_fe_vec, length);
@@ -115,7 +115,7 @@ impl<F: PrimeField> SecretWitness<F> {
         let length = suffix.len();
         let mut split_fe_vec = suffix
             .chunks(31)
-            .map(|part| F::read(part).expect("pack hash as field element"))
+            .map(part_string_padding)
             .collect::<Vec<_>>();
         split_fe_vec.resize(SUFFIX_FR_LENGTH, F::zero());
         self.suffix = (split_fe_vec, length);
@@ -138,6 +138,12 @@ impl<F: PrimeField> SecretWitness<F> {
         self.message_hash =
             Some(F::read(&*signature_msg_hash).expect("packed signature message hash error"));
     }
+}
+
+fn part_string_padding<F: PrimeField>(part: &[u8]) -> F {
+    let mut part_vec = part.to_vec();
+    part_vec.resize(32, 0);
+    F::read(&*part_vec).expect("pack part string as field element")
 }
 
 pub fn from_be_bytes(bytes: &[u8]) -> Vec<bool> {
@@ -164,7 +170,7 @@ pub fn le_bit_vector_into_field_element<F: PrimeField>(bits: &[bool]) -> F {
     fe
 }
 
-pub fn append_be_fixed_width<P: PrimeField>(content: &mut Vec<bool>, x: &P, width: usize) {
+pub fn append_be_fixed_width<F: PrimeField>(content: &mut Vec<bool>, x: &F, width: usize) {
     let mut bits: Vec<bool> = BitIteratorBE::new(x.into_repr()).collect();
     bits.reverse();
     bits.resize(width, false);

@@ -4,7 +4,7 @@ pub const PREFIX_FR_LENGTH: usize = MAX_PREFIX_LENGTH / 31 + 1;
 
 pub const MIN_SECRET_LENGTH: usize = 6;
 pub const MAX_SECRET_LENGTH: usize = 100;
-pub const SECRET_FR_LENGTH: usize = MAX_SECRET_LENGTH / 31 + 1;
+pub const SECRET_FR_LENGTH: usize = MAX_SECRET_LENGTH / 31 + 1; // If it's divisible without adding 1
 
 pub const MIN_SUFFIX_LENGTH: usize = 768;
 pub const MAX_SUFFIX_LENGTH: usize = 1024;

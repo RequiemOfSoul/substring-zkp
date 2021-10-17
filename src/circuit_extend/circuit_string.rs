@@ -22,7 +22,11 @@ impl<F: PrimeField> CircuitString<F> {
         string_witness: &[F],
         max_length: usize,
     ) -> Result<Self, SynthesisError> {
-        assert!(string_witness.len() * 31 <= max_length);
+        assert!(
+            (string_witness.len() - 1) * 31 <= max_length
+                && max_length <= string_witness.len() * 31,
+            "string witness padding error"
+        );
         let split_length = if max_length % 31 == 0 {
             max_length / 31
         } else {
@@ -100,8 +104,10 @@ impl<F: PrimeField> Index<usize> for CircuitString<F> {
 
     fn index(&self, index: usize) -> &Self::Output {
         assert!(
-            F::from(index as u128) < self.length.get_value().unwrap(),
-            "index out of range"
+            index < self.string.len(),
+            "index:{} out of range:{}",
+            index,
+            self.string.len()
         );
         &self.string[index]
     }
