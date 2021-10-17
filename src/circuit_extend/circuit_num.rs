@@ -54,13 +54,13 @@ impl<F: PrimeField> CircuitNum<F> {
             "comparison is only supported for fixed-length elements"
         );
 
-        let two = F::from(2 as u128);
+        let two = F::from(2u128);
         let power = F::from(length as u128);
         let mut base = two.pow(&power.into_repr());
         base.sub_assign(&F::one());
 
         let expr = AllocatedFr::alloc(cs.ns(|| "calculate base - x + y"), || {
-            let temp = match (x.get_value(), y.get_value()) {
+            match (x.get_value(), y.get_value()) {
                 (Some(x), Some(y)) => {
                     let mut temp = base;
                     temp.sub_assign(&x);
@@ -68,8 +68,7 @@ impl<F: PrimeField> CircuitNum<F> {
                     Ok(temp)
                 }
                 _ => Err(SynthesisError::AssignmentMissing),
-            };
-            temp
+            }
         })?;
         cs.enforce(
             || "check base - x + y constraint",
@@ -79,10 +78,9 @@ impl<F: PrimeField> CircuitNum<F> {
         );
         let bits = get_bits_le_fixed(&expr, cs.ns(|| "diff bits"), length + 1)?;
 
-        Ok(bits
+        Ok(*bits
             .last()
-            .expect("expr bit representation should always contain at least one bit")
-            .clone())
+            .expect("expr bit representation should always contain at least one bit"))
     }
 
     pub fn equals<CS: ConstraintSystem<F>>(
@@ -90,7 +88,7 @@ impl<F: PrimeField> CircuitNum<F> {
         x: &Self,
         y: &Self,
     ) -> Result<Boolean, SynthesisError> {
-        let is_equal = AllocatedFr::equals(cs.ns(|| "equals"), &x.get_num(), &y.get_num())?;
+        let is_equal = AllocatedFr::equals(cs.ns(|| "equals"), x.get_num(), y.get_num())?;
         Ok(is_equal)
     }
 
@@ -126,14 +124,14 @@ impl<F: PrimeField> CircuitNum<F> {
             cs.ns(|| "conditionally_select"),
             x.get_num(),
             y.get_num(),
-            &condition,
+            condition,
         )?;
 
-        Ok(CircuitNum::from_fr_with_known_length(
+        CircuitNum::from_fr_with_known_length(
             cs.ns(|| "chosen number as ce"),
             selected_number,
             y.length,
-        )?)
+        )
     }
 
     pub fn get_num(&self) -> &AllocatedFr<F> {
@@ -173,7 +171,7 @@ where
     let mut coeff = F::one();
 
     for bit in bits.iter() {
-        packed_lc = packed_lc + (coeff, bit.get_variable());
+        packed_lc += (coeff, bit.get_variable());
         coeff = coeff.double();
     }
 
@@ -184,7 +182,7 @@ where
         |zero| zero + allocated_fr.get_variable(),
     );
 
-    Ok(bits.into_iter().map(|b| Boolean::from(b)).collect())
+    Ok(bits.into_iter().map(Boolean::from).collect())
 }
 
 pub fn field_into_allocated_bits_le_fixed<CS: ConstraintSystem<F>, F: PrimeField>(

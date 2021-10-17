@@ -3,7 +3,7 @@ use crate::circuit_extend::{CircuitNum, ExtendFunction};
 use crate::params::LENGTH_REPR_BIT_WIDTH;
 use crate::utils::{calculate_ascii_char, pack_bits_to_element};
 use ark_ff::{FpParameters, PrimeField};
-use ark_std::convert::{TryFrom, TryInto};
+use ark_std::convert::TryInto;
 use ark_std::ops::Index;
 use ckb_gadgets::algebra::boolean::Boolean;
 use ckb_gadgets::algebra::fr::AllocatedFr;
@@ -16,23 +16,10 @@ pub struct CircuitString<F: PrimeField> {
     length: CircuitNum<F>,
 }
 
-// impl<F: PrimeField> Iterator for CircuitString<F> {
-//     type Item = CircuitByte<F>;
-//
-//     fn next(&mut self) -> Option<Self::Item>{
-//         self.string
-//     }
-// }
-
-impl<F> CircuitString<F>
-where
-    F: PrimeField,
-{
-    // fn from_bytes(b: &[u8]) -> Self {}
-
-    fn from_string_witness_with_fixed_length<CS: ConstraintSystem<F>>(
+impl<F: PrimeField> CircuitString<F> {
+    pub fn from_string_witness_with_fixed_length<CS: ConstraintSystem<F>>(
         mut cs: CS,
-        string_witness: Vec<F>,
+        string_witness: &[F],
         max_length: usize,
     ) -> Result<Self, SynthesisError> {
         assert!(string_witness.len() * 31 <= max_length);
@@ -46,10 +33,10 @@ where
         let mut string = Vec::with_capacity(max_length);
         let mut calc_length = AllocatedFr::constant(cs.ns(|| "initialized zero"), F::zero())?;
 
-        for (i, split_fe) in string_witness.into_iter().enumerate() {
+        for (i, split_fe) in string_witness.iter().enumerate() {
             let packed_split =
                 AllocatedFr::alloc_input(cs.ns(|| format!("add {}th section fr", i)), || {
-                    Ok(split_fe)
+                    Ok(*split_fe)
                 })?;
             let num = CircuitNum::from_fr_with_known_length(
                 cs.ns(|| format!("packed {}th Fr", i)),
@@ -83,12 +70,28 @@ where
         })
     }
 
-    fn get_bytes(&self) -> &[CircuitByte<F>] {
+    pub fn inputize<CS: ConstraintSystem<F>>(&self, mut cs: CS) -> Result<(), SynthesisError> {
+        for (i, byte) in self.packed_nums.iter().enumerate() {
+            byte.get_num()
+                .inputize(cs.ns(|| format!("inputize {}th byte", i)))?;
+        }
+        Ok(())
+    }
+
+    pub fn get_bytes(&self) -> &[CircuitByte<F>] {
         &self.string
     }
 
-    pub(crate) fn get_length(&self) -> &CircuitNum<F> {
+    pub fn get_length(&self) -> &CircuitNum<F> {
         &self.length
+    }
+
+    pub fn get_bits_le(&self) -> Vec<Boolean> {
+        let mut bits = Vec::with_capacity(self.string.len() * 8);
+        self.string
+            .iter()
+            .for_each(|byte| bits.extend_from_slice(byte.get_bits_le()));
+        bits
     }
 }
 
@@ -107,7 +110,7 @@ impl<F: PrimeField> Index<usize> for CircuitString<F> {
 #[derive(Clone)]
 pub struct CircuitByte<F: PrimeField> {
     num: AllocatedFr<F>,
-    le_bits: [Boolean; 8],
+    le_bits: Option<[Boolean; 8]>,
 }
 
 impl<F: PrimeField> CircuitByte<F> {
@@ -119,23 +122,22 @@ impl<F: PrimeField> CircuitByte<F> {
 
         Ok(CircuitByte {
             num,
-            le_bits: <[Boolean; 8]>::try_from(bits)
-                .map_err(|_| SynthesisError::AssignmentMissing)?,
+            le_bits: Some(
+                bits.try_into()
+                    .map_err(|_| SynthesisError::AssignmentMissing)?,
+            ),
         })
     }
 
     pub fn from_fr_with_unchecked(num: AllocatedFr<F>) -> Self {
-        CircuitByte {
-            num,
-            le_bits: [Boolean::constant(false); 8],
-        }
+        CircuitByte { num, le_bits: None }
     }
 
     pub fn from_fe_with_checked<CS: ConstraintSystem<F>>(
         mut cs: CS,
         field_element: F,
     ) -> Result<Self, SynthesisError> {
-        assert!(field_element < F::from(256 as u128));
+        assert!(field_element < F::from(256_u128));
         let num = AllocatedFr::alloc(cs.ns(|| "number from field element"), || Ok(field_element))?;
 
         CircuitByte::from_fr_with_checked(cs.ns(|| "generate CircuitString"), num)
@@ -148,13 +150,14 @@ impl<F: PrimeField> CircuitByte<F> {
         assert_eq!(bits.len() % 8, 0, "bits is not byte-aligned");
         assert!(bits.len() <= F::Params::MODULUS_BITS as usize);
 
-        let (bits, number) = pack_bits_to_element(cs.ns(|| "pack back"), bits)?;
+        let number = pack_bits_to_element(cs.ns(|| "pack back"), &bits)?;
 
         Ok(CircuitByte {
             num: number,
-            le_bits: bits
-                .try_into()
-                .map_err(|_| SynthesisError::AssignmentMissing)?,
+            le_bits: Some(
+                bits.try_into()
+                    .map_err(|_| SynthesisError::AssignmentMissing)?,
+            ),
         })
     }
 
@@ -168,7 +171,7 @@ impl<F: PrimeField> CircuitByte<F> {
             cs.ns(|| "conditionally_select"),
             &x.num,
             &y.num,
-            &condition,
+            condition,
         )?;
 
         Ok(CircuitByte::from_fr_with_unchecked(selected_number))
@@ -184,13 +187,10 @@ impl<F: PrimeField> CircuitByte<F> {
             cs.ns(|| "conditionally_select"),
             &x.num,
             &y.num,
-            &condition,
+            condition,
         )?;
 
-        Ok(CircuitByte::from_fr_with_checked(
-            cs.ns(|| "chosen number as ce"),
-            selected_number,
-        )?)
+        CircuitByte::from_fr_with_checked(cs.ns(|| "chosen number as ce"), selected_number)
     }
 
     pub fn select_ifle_with_unchecked<CS: ConstraintSystem<F>>(
@@ -204,7 +204,23 @@ impl<F: PrimeField> CircuitByte<F> {
         Self::conditionally_select_with_unchecked(cs.ns(|| "select"), a, b, &eq)
     }
 
+    pub fn generate_bits_le<CS: ConstraintSystem<F>>(
+        &mut self,
+        mut cs: CS,
+    ) -> Result<&[Boolean], SynthesisError> {
+        let bits = get_bits_le_fixed(&self.num, cs.ns(|| "unpacked AllocatedFr"), 8)?;
+        self.le_bits = Some(
+            bits.try_into()
+                .map_err(|_| SynthesisError::AssignmentMissing)?,
+        );
+        Ok(self.le_bits.as_ref().unwrap())
+    }
+
     pub fn get_num(&self) -> &AllocatedFr<F> {
         &self.num
+    }
+
+    pub fn get_bits_le(&self) -> &[Boolean] {
+        self.le_bits.as_ref().unwrap()
     }
 }

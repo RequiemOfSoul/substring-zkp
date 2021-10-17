@@ -108,7 +108,7 @@ where
         };
 
         let delta_inv_value = delta_value.as_ref().map(|delta_value| {
-            let tmp = delta_value.clone();
+            let tmp = delta_value;
             if tmp.is_zero() {
                 F::one() // we can return any number here, it doesn't matter
             } else {
@@ -125,7 +125,7 @@ where
         // If `delta` is zero (a == b), `t` cannot equal 1
         let t_value = match (delta_value, delta_inv_value) {
             (Some(a), Some(b)) => {
-                let mut t = a.clone();
+                let mut t = a;
                 t.mul_assign(&b);
                 Ok(t)
             }

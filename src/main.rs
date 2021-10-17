@@ -1,4 +1,5 @@
-#[warn(non_snake_case)]
+#![allow(non_snake_case)]
+#![allow(dead_code)]
 mod circuit;
 mod circuit_extend;
 mod params;
@@ -11,22 +12,21 @@ use std::time::Instant;
 
 // use ark_bls12_381::{Bls12_381 as E, Fr};
 use crate::utils::generate_circuit_instance;
-use ark_bn254::{Bn254 as E, Fr};
-use ark_ff::FpParameters;
-use ark_ff::PrimeField;
+use ark_bn254::Bn254 as E;
 use ckb_groth16::{
     create_random_proof, generate_random_parameters, verifier::prepare_verifying_key, verify_proof,
 };
 
 fn main() {
-    println!("CAPACITY:{}", <Fr as PrimeField>::Params::CAPACITY);
-    println!("MODULUS_BITS:{}", <Fr as PrimeField>::Params::MODULUS_BITS);
     let rng = &mut test_rng();
 
-    let prefix = "a".to_string();
-    let suffix = "b".to_string();
-    let secret = "secret".to_string();
-    let (c, public_input) = generate_circuit_instance(prefix, suffix, secret, 32);
+    // let secret = "christian.schneider@androidloves.me";
+    // let message = "from:Christian Schneider <christian.schneider@androidloves.me>\r\nsubject:this is a test mail\r\ndate:Sat, 14 Mar 2020 21:48:57 +0100\r\nmessage-id:<4c2828df-2dae-74ff-2fa7-e6ac36100341@androidloves.me>\r\nto:mail@kmille.wtf\r\ncontent-type:text/plain; charset=utf-8; format=flowed\r\ncontent-transfer-encoding:7bit\r\ndkim-signature:v=1; a=rsa-sha256; c=relaxed/relaxed; d=androidloves.me; s=2019022801; t=1584218937; h=from:from:reply-to:subject:subject:date:date:message-id:message-id: to:to:cc:content-type:content-type: content-transfer-encoding:content-transfer-encoding; bh=aeLbTnlUQQv2UFEWKHeiL5Q0NjOwj4ktNSInk8rN/P0=; b=";
+    let secret = "secret";
+    println!("{}", secret.len());
+    let message = "prefix_secret_suffix";
+    println!("{}", message.len());
+    let (c, public_input) = generate_circuit_instance(secret.to_string(), message.to_string());
 
     let s_start = Instant::now();
     let params = generate_random_parameters::<E, _, _>(c.clone(), rng).unwrap();

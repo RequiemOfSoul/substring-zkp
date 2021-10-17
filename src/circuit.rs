@@ -1,17 +1,15 @@
 use crate::circuit_extend::{CircuitByte, CircuitString};
 use crate::circuit_extend::{CircuitNum, ExtendFunction};
 use crate::params::{
-    LENGTH_REPR_BIT_WIDTH, MAX_HASH_PREIMAGE_LENGTH, MIN_HASH_PREIMAGE_LENGTH,
-    MIN_PREFIX_BIT_WIDTH, MIN_PREFIX_LENGTH, MIN_SECRET_BIT_WIDTH, MIN_SECRET_LENGTH,
-    MIN_SUFFIX_LENGTH, PREFIX_BIT_WIDTH, PREFIX_LENGTH, SECRET_BIT_WIDTH, SECRET_LENGTH,
+    LENGTH_REPR_BIT_WIDTH, MAX_HASH_PREIMAGE_BIT_WIDTH, MAX_HASH_PREIMAGE_LENGTH,
+    MAX_PREFIX_BIT_WIDTH, MAX_PREFIX_LENGTH, MAX_SECRET_BIT_WIDTH, MAX_SECRET_LENGTH,
+    MAX_SUFFIX_LENGTH, MIN_HASH_PREIMAGE_LENGTH, MIN_PREFIX_BIT_WIDTH, MIN_PREFIX_LENGTH,
+    MIN_SECRET_BIT_WIDTH, MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH,
 };
 use crate::utils::pack_bits_to_element;
-use ark_ff::PrimeField;
-use ark_std::ops::Range;
-use ckb_gadgets::algebra::boolean::Boolean;
+use ark_ff::{FpParameters, PrimeField};
 use ckb_gadgets::algebra::fr::AllocatedFr;
-use ckb_gadgets::hashes::abstract_hash::AbstractHash;
-use ckb_gadgets::hashes::sha256::{sha256, AbstractHashSha256, AbstractHashSha256Output};
+use ckb_gadgets::hashes::sha256::sha256;
 use ckb_r1cs::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
 
 #[derive(Clone, Debug)]
@@ -27,14 +25,7 @@ pub struct SecretStringCircuit<F: PrimeField> {
     pub message: Option<Vec<F>>,
 
     pub secret_hash: Option<F>,
-    pub message_hash: Option<F>, // need assert!
-
-    pub a_bytes: Option<Vec<u8>>,
-    pub b_bytes: Option<Vec<u8>>,
-    pub secret_bytes: Option<Vec<u8>>,
-
-    pub secret_commitment: Option<Vec<u8>>,
-    pub all_string_commitment: Option<Vec<u8>>,
+    pub message_hash: Option<F>,
 }
 
 impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
@@ -42,72 +33,92 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         self,
         cs: &mut CS,
     ) -> Result<(), SynthesisError> {
-        let secret_var =
-            AbstractHashSha256Output::alloc(cs.ns(|| "secret"), self.secret_bytes.unwrap())?;
-        let a_var = AbstractHashSha256Output::alloc(cs.ns(|| "a"), self.a_bytes.unwrap())?;
-        pack_bits_to_element(cs.ns(|| "packed a"), a_var.get_value().unwrap())?;
-        let b_var = AbstractHashSha256Output::alloc(cs.ns(|| "b"), self.b_bytes.unwrap())?;
-        pack_bits_to_element(cs.ns(|| "packed b"), b_var.get_value().unwrap())?;
-
-        let secret_commitment = AbstractHashSha256Output::alloc(
-            cs.ns(|| "secret commitment"),
-            self.secret_commitment.unwrap(),
+        // convert witness to circuit variables
+        let secret_commitment = AllocatedFr::alloc(cs.ns(|| "secret commitment"), || {
+            self.secret_hash.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+        let message_commitment = AllocatedFr::alloc(cs.ns(|| "signed message commitment"), || {
+            self.message_hash.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+        let secret = CircuitString::from_string_witness_with_fixed_length(
+            cs.ns(|| "convert secret string witness to CircuitString"),
+            &self
+                .secret_padding
+                .ok_or(SynthesisError::AssignmentMissing)?,
+            MAX_SECRET_LENGTH,
         )?;
-        let all_string_commitment = AbstractHashSha256Output::alloc(
-            cs.ns(|| "all string commitment"),
-            self.all_string_commitment.unwrap(),
+        let prefix = CircuitString::from_string_witness_with_fixed_length(
+            cs.ns(|| "convert prefix string witness to CircuitString"),
+            &self
+                .prefix_padding
+                .ok_or(SynthesisError::AssignmentMissing)?,
+            MAX_PREFIX_LENGTH,
+        )?;
+        let suffix = CircuitString::from_string_witness_with_fixed_length(
+            cs.ns(|| "convert suffix string witness to CircuitString"),
+            &self
+                .suffix_padding
+                .ok_or(SynthesisError::AssignmentMissing)?,
+            MAX_SUFFIX_LENGTH,
         )?;
 
-        let secret_commitment_out =
-            AbstractHashSha256::hash_enforce(cs.ns(|| "secret commitment out"), &[&secret_var])?;
-        // let secret_commitment = sha256(cs.ns(|| "calculate secret commitment"), secret_bits)?;
-        let all_string_commitment_out = AbstractHashSha256::hash_enforce(
-            cs.ns(|| "all string commitment out"),
-            &[&a_var, &secret_var, &b_var],
+        // get secret hash preimage
+        let secret_bits = secret.get_bits_le();
+        let mut signed_message_bytes = calculate_correct_preimage(
+            cs.ns(|| "calculate correct preimage"),
+            &prefix,
+            &secret,
+            &suffix,
         )?;
-        // let signature_message_hash = sha256(cs.ns(|| "calculate signature message hash"), message_bits)?;
-
-        if let (Some(hash_bits), Some(out_bits)) = (
-            secret_commitment.get_value(),
-            secret_commitment_out.get_value(),
-        ) {
-            let (out_bits, _) =
-                pack_bits_to_element(cs.ns(|| "packed secret_commitment"), out_bits)?;
-            for (i, (circuit_in, hash_out)) in hash_bits.iter().zip(out_bits.iter()).enumerate() {
-                assert_eq!(
-                    circuit_in.get_value(),
-                    hash_out.get_value(),
-                    "secret_commitment:{}",
-                    i
-                );
-                Boolean::enforce_equal(
-                    cs.ns(|| format!("secret string:{}", i)),
-                    circuit_in,
-                    hash_out,
-                )?
-            }
+        // get message hash preimage
+        let mut signed_message_bits = Vec::with_capacity(MAX_HASH_PREIMAGE_BIT_WIDTH);
+        for (i, byte) in signed_message_bytes.iter_mut().enumerate() {
+            let bits = byte.generate_bits_le(cs.ns(|| format!("byte{}:generate bits le", i)))?;
+            signed_message_bits.extend_from_slice(bits);
         }
-        if let (Some(hash_bits), Some(out_bits)) = (
-            all_string_commitment.get_value(),
-            all_string_commitment_out.get_value(),
-        ) {
-            let (out_bits, _) =
-                pack_bits_to_element(cs.ns(|| "packed all_string_commitment"), out_bits)?;
-            for (i, (circuit_in, hash_out)) in hash_bits.iter().zip(out_bits.iter()).enumerate() {
-                assert_eq!(
-                    circuit_in.get_value(),
-                    hash_out.get_value(),
-                    "all_string_commitment:{}",
-                    i
-                );
-                Boolean::enforce_equal(cs.ns(|| format!("all string:{}", i)), circuit_in, hash_out)?
-            }
-        }
+
+        // calculate secret hash
+        let mut secret_commitment_bits =
+            sha256(cs.ns(|| "calculate secret string hash"), &secret_bits)?;
+        secret_commitment_bits.reverse();
+        secret_commitment_bits.truncate(F::Params::CAPACITY as usize);
+
+        // calculate message hash
+        let mut message_commitment_bits =
+            sha256(cs.ns(|| "calc signed message hash"), &signed_message_bits)?;
+        message_commitment_bits.reverse();
+        message_commitment_bits.truncate(F::Params::CAPACITY as usize);
+
+        // Check whether the secret hash is correctly calculated
+        let final_secret_hash =
+            pack_bits_to_element(cs.ns(|| "final secret hash"), &secret_commitment_bits)?;
+        cs.enforce(
+            || "enforce external secret hash equality",
+            |lc| lc + secret_commitment.get_variable(),
+            |lc| lc + CS::one(),
+            |lc| lc + final_secret_hash.get_variable(),
+        );
+
+        // Check whether the signed message hash is correctly calculated
+        let final_message_hash =
+            pack_bits_to_element(cs.ns(|| "final message hash"), &message_commitment_bits)?;
+        cs.enforce(
+            || "enforce external message hash equality",
+            |lc| lc + message_commitment.get_variable(),
+            |lc| lc + CS::one(),
+            |lc| lc + final_message_hash.get_variable(),
+        );
+
+        // enforce public input inputize
+        prefix.inputize(cs.ns(|| "inputize prefix"))?;
+        suffix.inputize(cs.ns(|| "inputize prefix"))?;
+        secret_commitment.inputize(cs.ns(|| "inputize pub_data"))?;
+        message_commitment.inputize(cs.ns(|| "inputize signature message hash"))?;
         Ok(())
     }
 }
 
-fn select_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
+fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
     mut cs: CS,
     a: &CircuitString<F>,
     b: &CircuitString<F>,
@@ -115,12 +126,11 @@ fn select_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
 ) -> Result<Vec<CircuitByte<F>>, SynthesisError> {
     let a_length = a.get_length();
     let b_length = b.get_length();
-    // let c_length = c.get_length();
 
     let a_add_b_length = a_length
         .get_num()
         .add(cs.ns(|| "a_len + b_len"), b_length.get_num())?;
-    let a_add_b_length = CircuitNum::from_fr_with_known_length(
+    let a_add_b_length_cn = CircuitNum::from_fr_with_known_length(
         cs.ns(|| "a + b_length as CircuitNum"),
         a_add_b_length,
         LENGTH_REPR_BIT_WIDTH,
@@ -165,13 +175,13 @@ fn select_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             &searched_a_char,
             &searched_b_char,
             &nth,
-            &a_length,
+            a_length,
         )?;
         selecting_string.push(select_char);
     }
 
     // third section
-    for i in MIN_PREFIX_BIT_WIDTH + MIN_SECRET_BIT_WIDTH..PREFIX_BIT_WIDTH {
+    for i in MIN_PREFIX_BIT_WIDTH + MIN_SECRET_BIT_WIDTH..MAX_PREFIX_BIT_WIDTH {
         let nth = CircuitNum::from_fe_with_known_length(
             cs.ns(|| format!("Third section:{}th", i)),
             || Ok(F::from(i as u128)),
@@ -183,7 +193,7 @@ fn select_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         )?;
         let index_c = nth.get_num().sub(
             cs.ns(|| format!("Third section:calculate index_c={} - a_len - b_len", i)),
-            a_add_b_length.get_num(),
+            a_add_b_length_cn.get_num(),
         )?;
 
         let searched_a_char = search_char(
@@ -216,7 +226,7 @@ fn select_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
                 &searched_a_char,
                 &searched_b_char,
                 &nth,
-                &a_length,
+                a_length,
             )?;
             CircuitByte::select_ifle_with_unchecked(
                 cs.ns(|| {
@@ -228,14 +238,14 @@ fn select_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
                 &selected_char,
                 &searched_c_char,
                 &nth,
-                &a_add_b_length,
+                &a_add_b_length_cn,
             )?
         };
         selecting_string.push(selected_char);
     }
 
     // fourth section
-    for i in PREFIX_BIT_WIDTH..PREFIX_BIT_WIDTH + SECRET_BIT_WIDTH {
+    for i in MAX_PREFIX_BIT_WIDTH..MAX_PREFIX_BIT_WIDTH + MAX_SECRET_BIT_WIDTH {
         let nth = CircuitNum::from_fe_with_known_length(
             cs.ns(|| format!("Fourth section:{}th", i)),
             || Ok(F::from(i as u128)),
@@ -247,19 +257,19 @@ fn select_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         )?;
         let index_c = nth.get_num().sub(
             cs.ns(|| format!("Fourth section:calculate index_c:{} - a_len - b_len", i)),
-            a_add_b_length.get_num(),
+            a_add_b_length_cn.get_num(),
         )?;
         let searched_b_char = search_char(
             cs.ns(|| format!("Fourth section:search b {}th char", i)),
             a,
             &index_b,
-            0..SECRET_LENGTH,
+            0..MAX_SECRET_LENGTH,
         )?;
         let searched_c_char = search_char(
             cs.ns(|| format!("Fourth section:search c {}th char", i)),
             b,
             &index_c,
-            0..PREFIX_LENGTH + SECRET_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH,
+            0..MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH,
         )?;
         let select_char = CircuitByte::select_ifle_with_unchecked(
             cs.ns(|| {
@@ -271,13 +281,13 @@ fn select_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             &searched_b_char,
             &searched_c_char,
             &nth,
-            &a_add_b_length,
+            &a_add_b_length_cn,
         )?;
         selecting_string.push(select_char);
     }
 
     // fifth section
-    for i in PREFIX_LENGTH + SECRET_LENGTH..MIN_HASH_PREIMAGE_LENGTH {
+    for i in MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH..MIN_HASH_PREIMAGE_LENGTH {
         let nth = CircuitNum::from_fe_with_known_length(
             cs.ns(|| format!("Fifth section:{}th", i)),
             || Ok(F::from(i as u128)),
@@ -285,7 +295,7 @@ fn select_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         )?;
         let index_c = nth.get_num().sub(
             cs.ns(|| format!("Fifth section:calculate index_c:{} - a_len - b_len", i)),
-            a_add_b_length.get_num(),
+            a_add_b_length_cn.get_num(),
         )?;
         let search_c_char = search_char(
             cs.ns(|| {
@@ -310,7 +320,7 @@ fn select_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         )?;
         let index_c = nth.get_num().sub(
             cs.ns(|| format!("Seventh section:calculate index_c:{} - a_len - b_len", i)),
-            a_add_b_length.get_num(),
+            a_add_b_length_cn.get_num(),
         )?;
         let search_c_char = search_char(
             cs.ns(|| {
@@ -321,10 +331,12 @@ fn select_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             }),
             c,
             &index_c,
-            MIN_HASH_PREIMAGE_LENGTH - PREFIX_LENGTH - SECRET_LENGTH..MAX_HASH_PREIMAGE_LENGTH,
+            MIN_HASH_PREIMAGE_LENGTH - MAX_PREFIX_LENGTH - MAX_SECRET_LENGTH
+                ..MAX_HASH_PREIMAGE_LENGTH,
         )?;
         selecting_string.push(search_c_char);
     }
+
     Ok(selecting_string)
 }
 
@@ -332,7 +344,7 @@ fn search_char<F: PrimeField, CS: ConstraintSystem<F>>(
     mut cs: CS,
     string: &CircuitString<F>,
     index: &AllocatedFr<F>,
-    range: Range<usize>,
+    range: ark_std::ops::Range<usize>,
 ) -> Result<CircuitByte<F>, SynthesisError> {
     let mut selected_byte = AllocatedFr::constant(cs.ns(|| "init selected_byte"), F::zero())?;
     for i in range {
