@@ -1,5 +1,7 @@
 use crate::circuit::SecretStringCircuit;
-use crate::params::{MAX_SUFFIX_LENGTH, PREFIX_FR_LENGTH, SECRET_FR_LENGTH, SUFFIX_FR_LENGTH};
+use crate::params::{
+    MAX_SECRET_LENGTH, MAX_SUFFIX_LENGTH, PREFIX_FR_LENGTH, SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
+};
 use ark_ff::{BitIteratorBE, PrimeField};
 #[allow(clippy::useless_attribute)]
 use sha2::{Digest, Sha256};
@@ -42,11 +44,11 @@ impl<F: PrimeField> SecretWitness<F> {
     pub fn into_circuit_instance(self) -> SecretStringCircuit<F> {
         SecretStringCircuit {
             prefix_padding: Some(self.prefix.0),
-            prefix_length: (None),
+            prefix_length: Some(F::from(self.prefix.1 as u128)),
             secret_padding: Some(self.secret.0),
-            secret_length: None,
+            secret_length: Some(F::from(self.secret.1 as u128)),
             suffix_padding: Some(self.suffix.0),
-            suffix_length: None,
+            suffix_length: Some(F::from(self.suffix.1 as u128)),
             secret: None,
             message: None,
             secret_hash: self.secret_commitment,
@@ -123,14 +125,20 @@ impl<F: PrimeField> SecretWitness<F> {
     }
 
     fn finalize_hash(&mut self, secret: impl AsRef<[u8]>, message: impl AsRef<[u8]>) {
+        let mut secret_padding = secret.as_ref().to_vec();
+        secret_padding.resize(SECRET_FR_LENGTH * 31, 0);
+
         let mut h = Sha256::new();
-        h.update(&secret);
+        h.update(&secret_padding);
         let mut secret_commitment = h.finalize().to_vec();
+        println!("{:?}", secret_commitment);
+        secret_commitment.reverse();
         secret_commitment[31] &= 0x1f;
 
         let mut h = Sha256::new();
         h.update(&message);
         let mut signature_msg_hash = h.finalize().to_vec();
+        signature_msg_hash.reverse();
         signature_msg_hash[31] &= 0x1f;
 
         self.secret_commitment =

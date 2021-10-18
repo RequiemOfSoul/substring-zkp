@@ -38,16 +38,12 @@ impl<F: PrimeField> CircuitString<F> {
         let mut calc_length = AllocatedFr::constant(cs.ns(|| "initialized zero"), F::zero())?;
 
         for (i, split_fe) in string_witness.iter().enumerate() {
-            let packed_split =
-                AllocatedFr::alloc_input(cs.ns(|| format!("add {}th section fr", i)), || {
-                    Ok(*split_fe)
-                })?;
-            let num = CircuitNum::from_fr_with_known_length(
-                cs.ns(|| format!("packed {}th Fr", i)),
-                packed_split,
+            let packed_split = CircuitNum::from_fe_with_known_length(
+                cs.ns(|| format!("packed {}th section Fr", i)),
+                || Ok(*split_fe),
                 248,
             )?;
-            for (j, bits) in num.get_bits_le().chunks_exact(8).enumerate() {
+            for (j, bits) in packed_split.get_bits_le().chunks_exact(8).enumerate() {
                 calculate_ascii_char(
                     &mut calc_length,
                     cs.ns(|| format!("statistics:{}th chunk->{}th byte", i, j)),
@@ -58,7 +54,7 @@ impl<F: PrimeField> CircuitString<F> {
                     bits.to_vec(),
                 )?);
             }
-            packed_nums.push(num);
+            packed_nums.push(packed_split);
         }
 
         let length = CircuitNum::from_fr_with_known_length(
@@ -66,6 +62,7 @@ impl<F: PrimeField> CircuitString<F> {
             calc_length,
             LENGTH_REPR_BIT_WIDTH,
         )?;
+        println!("length: {}", length.get_value().unwrap());
 
         Ok(CircuitString {
             packed_nums,
@@ -88,6 +85,10 @@ impl<F: PrimeField> CircuitString<F> {
 
     pub fn get_length(&self) -> &CircuitNum<F> {
         &self.length
+    }
+
+    pub fn get_num(&self) -> &[CircuitNum<F>] {
+        &self.packed_nums
     }
 
     pub fn get_bits_le(&self) -> Vec<Boolean> {

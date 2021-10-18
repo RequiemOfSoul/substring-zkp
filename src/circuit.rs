@@ -39,6 +39,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         let message_commitment = AllocatedFr::alloc(cs.ns(|| "signed message commitment"), || {
             self.message_hash.ok_or(SynthesisError::AssignmentMissing)
         })?;
+
         let secret = CircuitString::from_string_witness_with_fixed_length(
             cs.ns(|| "convert secret string witness to CircuitString"),
             &self
@@ -46,6 +47,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
                 .ok_or(SynthesisError::AssignmentMissing)?,
             MAX_SECRET_LENGTH,
         )?;
+        assert_eq!(
+            self.secret_length.unwrap(),
+            secret.get_length().get_value().unwrap(),
+            "secret_length calculate wrong."
+        );
         let prefix = CircuitString::from_string_witness_with_fixed_length(
             cs.ns(|| "convert prefix string witness to CircuitString"),
             &self
@@ -53,6 +59,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
                 .ok_or(SynthesisError::AssignmentMissing)?,
             MAX_PREFIX_LENGTH,
         )?;
+        assert_eq!(
+            self.prefix_length,
+            prefix.get_length().get_value(),
+            "prefix_length calculate wrong."
+        );
         let suffix = CircuitString::from_string_witness_with_fixed_length(
             cs.ns(|| "convert suffix string witness to CircuitString"),
             &self
@@ -60,33 +71,49 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
                 .ok_or(SynthesisError::AssignmentMissing)?,
             MAX_SUFFIX_LENGTH,
         )?;
+        println!("{}", self.suffix_length.unwrap());
+        println!("{}", suffix.get_length().get_value().unwrap());
+        // TODO: assert error
+        assert_eq!(
+            self.suffix_length.unwrap(),
+            suffix.get_length().get_value().unwrap(),
+            "suffix_length calculate wrong."
+        );
 
         // get secret hash preimage
-        let secret_bits = secret.get_bits_be();
-        let mut signed_message_bytes = calculate_correct_preimage(
-            cs.ns(|| "calculate correct preimage"),
-            &prefix,
-            &secret,
-            &suffix,
-        )?;
-        // get message hash preimage
-        let mut signed_message_bits = Vec::with_capacity(MAX_HASH_PREIMAGE_BIT_WIDTH);
-        for (i, byte) in signed_message_bytes.iter_mut().enumerate() {
-            let bits = byte.generate_bits_be(cs.ns(|| format!("byte{}:generate bits be", i)))?;
-            signed_message_bits.extend(bits);
-        }
+        let mut secret_bits = secret.get_bits_be();
+        println!("bytes len:{}", secret.get_bytes().len());
+        println!("secret_bits:{}", secret_bits.len());
+        // secret_bits.chunks(8).for_each(|bit| {
+        //     bit.iter()
+        //         .for_each(|bit| print!("{}", bit.get_value().unwrap() as u8));
+        //     print!(" ")
+        // });
 
-        // calculate secret hash
+        // let mut signed_message_bytes = calculate_correct_preimage(
+        //     cs.ns(|| "calculate correct preimage"),
+        //     &prefix,
+        //     &secret,
+        //     &suffix,
+        // )?;
+        // // get message hash preimage
+        // let mut signed_message_bits = Vec::with_capacity(MAX_HASH_PREIMAGE_BIT_WIDTH);
+        // for (i, byte) in signed_message_bytes.iter_mut().enumerate() {
+        //     let bits = byte.generate_bits_be(cs.ns(|| format!("byte{}:generate bits be", i)))?;
+        //     signed_message_bits.extend(bits);
+        // }
+        //
+        // // calculate secret hash
         let mut secret_commitment_bits =
             sha256(cs.ns(|| "calculate secret string hash"), &secret_bits)?;
         secret_commitment_bits.reverse();
         secret_commitment_bits.truncate(F::Params::CAPACITY as usize);
 
         // calculate message hash
-        let mut message_commitment_bits =
-            sha256(cs.ns(|| "calc signed message hash"), &signed_message_bits)?;
-        message_commitment_bits.reverse();
-        message_commitment_bits.truncate(F::Params::CAPACITY as usize);
+        // let mut message_commitment_bits =
+        //     sha256(cs.ns(|| "calc signed message hash"), &signed_message_bits)?;
+        // message_commitment_bits.reverse();
+        // message_commitment_bits.truncate(F::Params::CAPACITY as usize);
 
         // Check whether the secret hash is correctly calculated
         let final_secret_hash =
@@ -97,22 +124,22 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
             |lc| lc + CS::one(),
             |lc| lc + final_secret_hash.get_variable(),
         );
-
-        // Check whether the signed message hash is correctly calculated
-        let final_message_hash =
-            pack_bits_to_element(cs.ns(|| "final message hash"), &message_commitment_bits)?;
-        cs.enforce(
-            || "enforce external message hash equality",
-            |lc| lc + message_commitment.get_variable(),
-            |lc| lc + CS::one(),
-            |lc| lc + final_message_hash.get_variable(),
-        );
-
-        // enforce public input inputize
-        prefix.inputize(cs.ns(|| "inputize prefix"))?;
-        suffix.inputize(cs.ns(|| "inputize suffix"))?;
-        secret_commitment.inputize(cs.ns(|| "inputize pub_data"))?;
-        message_commitment.inputize(cs.ns(|| "inputize signature message hash"))?;
+        //
+        // // Check whether the signed message hash is correctly calculated
+        // let final_message_hash =
+        //     pack_bits_to_element(cs.ns(|| "final message hash"), &message_commitment_bits)?;
+        // cs.enforce(
+        //     || "enforce external message hash equality",
+        //     |lc| lc + message_commitment.get_variable(),
+        //     |lc| lc + CS::one(),
+        //     |lc| lc + final_message_hash.get_variable(),
+        // );
+        //
+        // // enforce public input inputize
+        // prefix.inputize(cs.ns(|| "inputize prefix"))?;
+        // suffix.inputize(cs.ns(|| "inputize suffix"))?;
+        // secret_commitment.inputize(cs.ns(|| "inputize pub_data"))?;
+        // message_commitment.inputize(cs.ns(|| "inputize signature message hash"))?;
         Ok(())
     }
 }
@@ -375,7 +402,6 @@ fn test_secret_circuit() {
 
     println!("num_constraints: {}", cs.num_constraints());
     println!("unconstrained: {}", cs.find_unconstrained());
-    assert!(cs.is_satisfied());
     if let Some(err) = cs.which_is_unsatisfied() {
         println!("error: {}", err);
     }

@@ -17,8 +17,8 @@ pub fn generate_circuit_instance<F: PrimeField>(
     assert!(MIN_HASH_PREIMAGE_LENGTH <= message.len() && message.len() <= MAX_HASH_PREIMAGE_LENGTH);
 
     let secret_witness = SecretWitness::<F>::generate_witness(secret, message);
-    let public_input = secret_witness.get_public_input();
 
+    let public_input = secret_witness.get_public_input();
     let circuit = secret_witness.into_circuit_instance();
 
     (circuit, public_input)
