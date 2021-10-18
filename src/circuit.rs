@@ -110,7 +110,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
 
         // enforce public input inputize
         prefix.inputize(cs.ns(|| "inputize prefix"))?;
-        suffix.inputize(cs.ns(|| "inputize prefix"))?;
+        suffix.inputize(cs.ns(|| "inputize suffix"))?;
         secret_commitment.inputize(cs.ns(|| "inputize pub_data"))?;
         message_commitment.inputize(cs.ns(|| "inputize signature message hash"))?;
         Ok(())
