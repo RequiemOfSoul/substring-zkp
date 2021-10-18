@@ -178,7 +178,7 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         )?;
         selecting_string.push(select_char);
     }
-
+    println!("33333333333333333");
     // third section
     for i in MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH..MAX_PREFIX_LENGTH {
         let nth = CircuitNum::from_fe_with_known_length(
@@ -194,19 +194,21 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             cs.ns(|| format!("Third section:calculate index_c={} - a_len - b_len", i)),
             a_add_b_length_cn.get_num(),
         )?;
-
+        println!("1:{}", i);
         let searched_a_char = search_char(
             cs.ns(|| format!("Third section:search a {}th char", i)),
             a,
             nth.get_num(),
             MIN_PREFIX_LENGTH..MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH,
         )?;
+        println!("2:{}", i);
         let searched_b_char = search_char(
             cs.ns(|| format!("Third section:search b {}th char", i)),
             b,
             &index_b,
             MIN_PREFIX_LENGTH..MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH,
         )?;
+        println!("3:{}", i);
         let searched_c_char = search_char(
             cs.ns(|| format!("Third section:search c {}th char", i)),
             c,
@@ -242,7 +244,7 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         };
         selecting_string.push(selected_char);
     }
-
+    println!("444444444444444444444");
     // fourth section
     for i in MAX_PREFIX_LENGTH..MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH {
         let nth = CircuitNum::from_fe_with_known_length(
@@ -258,15 +260,17 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             cs.ns(|| format!("Fourth section:calculate index_c:{} - a_len - b_len", i)),
             a_add_b_length_cn.get_num(),
         )?;
+        println!("4:a:{}", i);
         let searched_b_char = search_char(
             cs.ns(|| format!("Fourth section:search b {}th char", i)),
-            a,
+            b,
             &index_b,
             0..MAX_SECRET_LENGTH,
         )?;
+        println!("4:b:{}", i);
         let searched_c_char = search_char(
             cs.ns(|| format!("Fourth section:search c {}th char", i)),
-            b,
+            c,
             &index_c,
             0..MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH,
         )?;
@@ -284,7 +288,7 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         )?;
         selecting_string.push(select_char);
     }
-
+    println!("5555555555555555555555");
     // fifth section
     for i in MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH..MIN_HASH_PREIMAGE_LENGTH {
         let nth = CircuitNum::from_fe_with_known_length(
@@ -309,7 +313,7 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         )?;
         selecting_string.push(search_c_char);
     }
-
+    println!("6666666666666666666666666");
     // seventh section
     for i in MIN_HASH_PREIMAGE_LENGTH..MAX_HASH_PREIMAGE_LENGTH {
         let nth = CircuitNum::from_fe_with_known_length(
@@ -330,8 +334,7 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             }),
             c,
             &index_c,
-            MIN_HASH_PREIMAGE_LENGTH - MAX_PREFIX_LENGTH - MAX_SECRET_LENGTH
-                ..MAX_HASH_PREIMAGE_LENGTH,
+            MIN_HASH_PREIMAGE_LENGTH - MAX_PREFIX_LENGTH - MAX_SECRET_LENGTH..MAX_SUFFIX_LENGTH,
         )?;
         selecting_string.push(search_c_char);
     }
@@ -357,4 +360,28 @@ fn search_char<F: PrimeField, CS: ConstraintSystem<F>>(
         )?;
     }
     Ok(CircuitByte::from_fr_with_unchecked(selected_byte))
+}
+
+#[test]
+fn test_secret_circuit() {
+    use ark_bn254::Fr;
+    use ckb_gadgets::test_constraint_system::TestConstraintSystem;
+
+    let mut cs = TestConstraintSystem::<Fr>::new();
+
+    let secret = "secret";
+    println!("{}", secret.len());
+    let mut message = "prefix_secret_suffix".to_string();
+    let padding = "a".repeat(crate::params::MIN_HASH_PREIMAGE_LENGTH);
+    message.push_str(&*padding);
+    println!("{}", message.len());
+    let (c, public_input) = crate::generate_circuit_instance(secret.to_string(), message);
+    c.generate_constraints(&mut cs).unwrap();
+
+    println!("{}", cs.num_constraints());
+    println!("unconstrained: {}", cs.find_unconstrained());
+    assert!(cs.is_satisfied());
+    if let Some(err) = cs.which_is_unsatisfied() {
+        Err(err.into()).unwrap();
+    }
 }
