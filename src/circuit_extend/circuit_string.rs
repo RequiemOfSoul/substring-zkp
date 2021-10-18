@@ -97,6 +97,14 @@ impl<F: PrimeField> CircuitString<F> {
             .for_each(|byte| bits.extend_from_slice(byte.get_bits_le()));
         bits
     }
+
+    pub fn get_bits_be(&self) -> Vec<Boolean> {
+        let mut bits = Vec::with_capacity(self.string.len() * 8);
+        self.string
+            .iter()
+            .for_each(|byte| bits.extend(byte.get_bits_be()));
+        bits
+    }
 }
 
 impl<F: PrimeField> Index<usize> for CircuitString<F> {
@@ -210,16 +218,20 @@ impl<F: PrimeField> CircuitByte<F> {
         Self::conditionally_select_with_unchecked(cs.ns(|| "select"), a, b, &eq)
     }
 
-    pub fn generate_bits_le<CS: ConstraintSystem<F>>(
+    pub fn generate_bits_be<CS: ConstraintSystem<F>>(
         &mut self,
         mut cs: CS,
-    ) -> Result<&[Boolean], SynthesisError> {
-        let bits = get_bits_le_fixed(&self.num, cs.ns(|| "unpacked AllocatedFr"), 8)?;
+    ) -> Result<Vec<Boolean>, SynthesisError> {
+        let le_bits = get_bits_le_fixed(&self.num, cs.ns(|| "unpacked AllocatedFr"), 8)?;
+        let mut be_bits = le_bits.clone();
         self.le_bits = Some(
-            bits.try_into()
+            le_bits
+                .try_into()
                 .map_err(|_| SynthesisError::AssignmentMissing)?,
         );
-        Ok(self.le_bits.as_ref().unwrap())
+
+        be_bits.reverse();
+        Ok(be_bits)
     }
 
     pub fn get_num(&self) -> &AllocatedFr<F> {
@@ -228,5 +240,11 @@ impl<F: PrimeField> CircuitByte<F> {
 
     pub fn get_bits_le(&self) -> &[Boolean] {
         self.le_bits.as_ref().unwrap()
+    }
+
+    pub fn get_bits_be(&self) -> Vec<Boolean> {
+        let mut bits = self.le_bits.unwrap().to_vec();
+        bits.reverse();
+        bits
     }
 }

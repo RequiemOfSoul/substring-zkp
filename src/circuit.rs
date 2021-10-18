@@ -62,7 +62,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         )?;
 
         // get secret hash preimage
-        let secret_bits = secret.get_bits_le();
+        let secret_bits = secret.get_bits_be();
         let mut signed_message_bytes = calculate_correct_preimage(
             cs.ns(|| "calculate correct preimage"),
             &prefix,
@@ -72,8 +72,8 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         // get message hash preimage
         let mut signed_message_bits = Vec::with_capacity(MAX_HASH_PREIMAGE_BIT_WIDTH);
         for (i, byte) in signed_message_bytes.iter_mut().enumerate() {
-            let bits = byte.generate_bits_le(cs.ns(|| format!("byte{}:generate bits le", i)))?;
-            signed_message_bits.extend_from_slice(bits);
+            let bits = byte.generate_bits_be(cs.ns(|| format!("byte{}:generate bits be", i)))?;
+            signed_message_bits.extend(bits);
         }
 
         // calculate secret hash
@@ -359,7 +359,7 @@ fn search_char<F: PrimeField, CS: ConstraintSystem<F>>(
 
 #[test]
 fn test_secret_circuit() {
-    use crate::test::TestConstraintSystem;
+    use crate::test_constraint_system::TestConstraintSystem;
     use ark_bn254::Fr;
 
     let mut cs = TestConstraintSystem::<Fr>::new();
@@ -370,7 +370,7 @@ fn test_secret_circuit() {
     let padding = "a".repeat(crate::params::MIN_HASH_PREIMAGE_LENGTH);
     message.push_str(&*padding);
     println!("{}", message.len());
-    let (c, public_input) = crate::generate_circuit_instance(secret.to_string(), message);
+    let (c, _) = crate::generate_circuit_instance(secret.to_string(), message);
     c.generate_constraints(&mut cs).unwrap();
 
     println!("num_constraints: {}", cs.num_constraints());

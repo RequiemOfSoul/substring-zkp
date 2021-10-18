@@ -3,10 +3,9 @@
 mod circuit;
 mod circuit_extend;
 mod params;
+mod test_constraint_system;
 mod utils;
 mod witness;
-
-mod test;
 
 use ark_serialize::*;
 use ark_std::test_rng;
@@ -27,7 +26,7 @@ fn main() {
     let secret = "secret";
     println!("{}", secret.len());
     let mut message = "prefix_secret_suffix".to_string();
-    let padding = "a".repeat(params::MIN_HASH_PREIMAGE_LENGTH - message.len());
+    let padding = "x".repeat(params::MIN_HASH_PREIMAGE_LENGTH - message.len());
     message.push_str(&*padding);
     println!("{}", message.len());
     let (c, public_input) = generate_circuit_instance(secret.to_string(), message);
