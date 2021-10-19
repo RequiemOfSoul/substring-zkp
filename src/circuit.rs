@@ -384,6 +384,7 @@ fn test_secret_circuit() {
 
     let mut cs = TestConstraintSystem::<Fr>::new();
 
+    // modify that the global variable: prefix length:1-5, secret length:3-7, suffix length:10-11
     let secret = "secret";
     let mut padding_message = "pre_secret_suffix".to_string();
     padding_message
