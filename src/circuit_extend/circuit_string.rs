@@ -62,7 +62,6 @@ impl<F: PrimeField> CircuitString<F> {
             calc_length,
             LENGTH_REPR_BIT_WIDTH,
         )?;
-        println!("length: {}", length.get_value().unwrap());
 
         Ok(CircuitString {
             packed_nums,

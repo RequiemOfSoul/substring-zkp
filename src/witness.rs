@@ -1,6 +1,7 @@
 use crate::circuit::SecretStringCircuit;
 use crate::params::{
-    MAX_SECRET_LENGTH, MAX_SUFFIX_LENGTH, PREFIX_FR_LENGTH, SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
+    MAX_HASH_PREIMAGE_LENGTH, MAX_SECRET_LENGTH, MAX_SUFFIX_LENGTH, PREFIX_FR_LENGTH,
+    SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
 };
 use ark_ff::{BitIteratorBE, PrimeField};
 #[allow(clippy::useless_attribute)]
@@ -12,6 +13,7 @@ pub struct SecretWitness<F: PrimeField> {
     prefix: (Vec<F>, usize),
     secret: (Vec<F>, usize),
     suffix: (Vec<F>, usize),
+    message_bytes: Vec<F>,
     pub secret_commitment: Option<F>,
     pub message_hash: Option<F>,
 }
@@ -24,19 +26,18 @@ impl<F: PrimeField> SecretWitness<F> {
             .expect("Secret don't split message")
             .to_string()
             .into_bytes();
-        let mut suffix = split_message
+        let suffix = split_message
             .last()
             .expect("Secret don't split message")
             .to_string()
             .into_bytes();
-        suffix.resize(MAX_SUFFIX_LENGTH, 0);
 
         let mut secret_witness = SecretWitness::default();
         secret_witness
             .absorb_prefix(&prefix)
             .absorb_secret(secret.as_bytes())
             .absorb_suffix(&suffix)
-            .finalize_hash(&secret, &message);
+            .finalize_hash(secret.into_bytes(), message.into_bytes());
 
         secret_witness
     }
@@ -50,7 +51,7 @@ impl<F: PrimeField> SecretWitness<F> {
             suffix_padding: Some(self.suffix.0),
             suffix_length: Some(F::from(self.suffix.1 as u128)),
             secret: None,
-            message: None,
+            message: Some(self.message_bytes),
             secret_hash: self.secret_commitment,
             message_hash: self.message_hash,
         }
@@ -84,6 +85,7 @@ impl<F: PrimeField> Default for SecretWitness<F> {
             prefix: (vec![Default::default(); PREFIX_FR_LENGTH], 0),
             secret: (vec![Default::default(); SECRET_FR_LENGTH], 0),
             suffix: (vec![Default::default(); SUFFIX_FR_LENGTH], 0),
+            message_bytes: vec![Default::default(); MAX_HASH_PREIMAGE_LENGTH],
             secret_commitment: None,
             message_hash: None,
         }
@@ -124,8 +126,8 @@ impl<F: PrimeField> SecretWitness<F> {
         self
     }
 
-    fn finalize_hash(&mut self, secret: impl AsRef<[u8]>, message: impl AsRef<[u8]>) {
-        let mut secret_padding = secret.as_ref().to_vec();
+    fn finalize_hash(&mut self, secret: Vec<u8>, message: Vec<u8>) {
+        let mut secret_padding = secret;
         secret_padding.resize(SECRET_FR_LENGTH * 31, 0);
 
         let mut h = Sha256::new();
@@ -141,6 +143,7 @@ impl<F: PrimeField> SecretWitness<F> {
         signature_msg_hash.reverse();
         signature_msg_hash[31] &= 0x1f;
 
+        self.message_bytes = message.iter().map(|&byte| F::from(byte as u128)).collect();
         self.secret_commitment =
             Some(F::read(&*secret_commitment).expect("packed secret commitment error"));
         self.message_hash =
