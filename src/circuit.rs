@@ -78,29 +78,14 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         );
 
         // get secret hash preimage
-        let mut secret_bits = secret.get_bits_be();
-        println!("bytes len:{}", secret.get_bytes().len());
-        println!("secret_bits:{}", secret_bits.len());
-        secret_bits.chunks(8).for_each(|bit| {
-            bit.iter()
-                .for_each(|bit| print!("{}", bit.get_value().unwrap() as u8));
-            print!(" ")
-        });
-
+        let secret_bits = secret.get_bits_be();
         let mut signed_message_bytes = calculate_correct_preimage(
             cs.ns(|| "calculate correct preimage"),
             &prefix,
             &secret,
             &suffix,
         )?;
-        println!("\n{}", self.message.as_ref().unwrap().len());
-        signed_message_bytes
-            .iter()
-            .zip(self.message.as_ref().unwrap().iter())
-            .enumerate()
-            .for_each(|(i, (byte, byte1))| {
-                println!("{}th:{} {}", i, byte.get_num().get_value().unwrap(), *byte1)
-            });
+
         // get message hash preimage
         let mut signed_message_bits = Vec::with_capacity(MAX_HASH_PREIMAGE_BIT_WIDTH);
         for (i, byte) in signed_message_bytes.iter_mut().enumerate() {
@@ -190,22 +175,12 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             nth.get_num(),
             MIN_PREFIX_LENGTH..MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH,
         )?;
-        println!(
-            "second{} searched_a_char:{}",
-            i,
-            searched_a_char.get_num().get_value().unwrap()
-        );
         let searched_b_char = search_char(
             cs.ns(|| format!("Second section:search b {}th char", i)),
             b,
             &index_b,
             0..MIN_SECRET_LENGTH,
         )?;
-        println!(
-            "second{} searched_b_char:{}",
-            i,
-            searched_b_char.get_num().get_value().unwrap()
-        );
         let selected_char = CircuitByte::select_ifle_with_unchecked(
             cs.ns(|| {
                 format!(
@@ -218,11 +193,6 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             &nth,
             a_length,
         )?;
-        println!(
-            "second{} select char:{}",
-            i,
-            selected_char.get_num().get_value().unwrap()
-        );
         selecting_string.push(selected_char);
     }
 
@@ -248,33 +218,18 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             nth.get_num(),
             MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH..MAX_PREFIX_LENGTH,
         )?;
-        println!(
-            "third{} searched_a_char:{}",
-            i,
-            searched_a_char.get_num().get_value().unwrap()
-        );
         let searched_b_char = search_char(
             cs.ns(|| format!("Third section:search b {}th char", i)),
             b,
             &index_b,
             0..MAX_PREFIX_LENGTH - MIN_PREFIX_LENGTH,
         )?;
-        println!(
-            "third{} searched_b_char:{}",
-            i,
-            searched_b_char.get_num().get_value().unwrap()
-        );
         let searched_c_char = search_char(
             cs.ns(|| format!("Third section:search c {}th char", i)),
             c,
             &index_c,
             0..MAX_PREFIX_LENGTH - MIN_SECRET_LENGTH - MIN_PREFIX_LENGTH,
         )?;
-        println!(
-            "third{} searched_c_char:{}",
-            i,
-            searched_c_char.get_num().get_value().unwrap()
-        );
 
         let selected_char = {
             let selected_char = CircuitByte::select_ifle_with_unchecked(
@@ -302,11 +257,6 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
                 &a_add_b_length_cn,
             )?
         };
-        println!(
-            "third{} select char:{}",
-            i,
-            selected_char.get_num().get_value().unwrap()
-        );
         selecting_string.push(selected_char);
     }
 
@@ -349,11 +299,6 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             &nth,
             &a_add_b_length_cn,
         )?;
-        println!(
-            "fourth{} select char:{}",
-            i,
-            selected_char.get_num().get_value().unwrap()
-        );
         selecting_string.push(selected_char);
     }
 
@@ -380,11 +325,6 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             &index_c,
             0..MIN_SUFFIX_LENGTH,
         )?;
-        println!(
-            "fifth{} select char:{}",
-            i,
-            selected_char.get_num().get_value().unwrap()
-        );
         selecting_string.push(selected_char);
     }
 
@@ -411,14 +351,8 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             MIN_HASH_PREIMAGE_LENGTH - MAX_PREFIX_LENGTH - MAX_SECRET_LENGTH
                 ..MAX_HASH_PREIMAGE_LENGTH,
         )?;
-        println!(
-            "sixth{} select char:{}",
-            i,
-            selected_char.get_num().get_value().unwrap()
-        );
         selecting_string.push(selected_char);
     }
-    println!("{}", selecting_string.len());
 
     Ok(selecting_string)
 }
@@ -451,11 +385,11 @@ fn test_secret_circuit() {
     let mut cs = TestConstraintSystem::<Fr>::new();
 
     let secret = "secret";
-    let mut message = "pre_secret_suffix".to_string();
-    let padding = "0".repeat(crate::params::MAX_HASH_PREIMAGE_LENGTH - message.len());
-    message.push_str(&*padding);
-    println!("message:{:?}", message.as_bytes());
-    let (c, _) = crate::generate_circuit_instance(secret.to_string(), message);
+    let mut padding_message = "pre_secret_suffix".to_string();
+    padding_message
+        .push_str(&*"0".repeat(crate::params::MAX_HASH_PREIMAGE_LENGTH - padding_message.len()));
+
+    let (c, _) = crate::generate_circuit_instance(secret.to_string(), padding_message);
     c.generate_constraints(&mut cs).unwrap();
 
     println!("num_constraints: {}", cs.num_constraints());

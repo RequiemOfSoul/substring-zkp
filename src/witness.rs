@@ -1,7 +1,6 @@
 use crate::circuit::SecretStringCircuit;
 use crate::params::{
-    MAX_HASH_PREIMAGE_LENGTH, MAX_SECRET_LENGTH, MAX_SUFFIX_LENGTH, PREFIX_FR_LENGTH,
-    SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
+    MAX_HASH_PREIMAGE_LENGTH, PREFIX_FR_LENGTH, SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
 };
 use ark_ff::{BitIteratorBE, PrimeField};
 #[allow(clippy::useless_attribute)]
@@ -133,7 +132,6 @@ impl<F: PrimeField> SecretWitness<F> {
         let mut h = Sha256::new();
         h.update(&secret_padding);
         let mut secret_commitment = h.finalize().to_vec();
-        println!("{:?}", secret_commitment);
         secret_commitment.reverse();
         secret_commitment[31] &= 0x1f;
 
