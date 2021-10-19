@@ -65,7 +65,7 @@ pub fn pack_bits_to_element<F: PrimeField, CS: ConstraintSystem<F>>(
         }
     }
 
-    let data_packed = AllocatedFr::alloc_input(cs.ns(|| "allocate data packed"), || Ok(value))?;
+    let data_packed = AllocatedFr::alloc(cs.ns(|| "allocate data packed"), || Ok(value))?;
 
     cs.enforce(
         || "pack bits into fe",

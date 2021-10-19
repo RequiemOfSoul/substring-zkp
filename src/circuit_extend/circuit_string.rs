@@ -71,9 +71,9 @@ impl<F: PrimeField> CircuitString<F> {
     }
 
     pub fn inputize<CS: ConstraintSystem<F>>(&self, mut cs: CS) -> Result<(), SynthesisError> {
-        for (i, byte) in self.packed_nums.iter().enumerate() {
-            byte.get_num()
-                .inputize(cs.ns(|| format!("inputize {}th byte", i)))?;
+        for (i, num) in self.packed_nums.iter().enumerate() {
+            num.get_num()
+                .inputize(cs.ns(|| format!("inputize {}th num", i)))?;
         }
         Ok(())
     }
