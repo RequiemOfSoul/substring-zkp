@@ -2,8 +2,8 @@ use crate::circuit_extend::{CircuitByte, CircuitString};
 use crate::circuit_extend::{CircuitNum, ExtendFunction};
 use crate::params::{
     LENGTH_REPR_BIT_WIDTH, MAX_HASH_PREIMAGE_BIT_WIDTH, MAX_HASH_PREIMAGE_LENGTH,
-    MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MAX_SUFFIX_LENGTH, MIN_HASH_PREIMAGE_LENGTH,
-    MIN_PREFIX_LENGTH, MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH,
+    MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_HASH_PREIMAGE_LENGTH, MIN_PREFIX_LENGTH,
+    MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH,
 };
 use crate::utils::pack_bits_to_element;
 use ark_ff::{FpParameters, PrimeField};
@@ -69,7 +69,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
             &self
                 .suffix_padding
                 .ok_or(SynthesisError::AssignmentMissing)?,
-            MAX_SUFFIX_LENGTH,
+            PADDING_SUFFIX_LENGTH,
         )?;
         // assert_eq!(
         //     self.suffix_length.unwrap(),
@@ -349,7 +349,7 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             c,
             &index_c,
             MIN_HASH_PREIMAGE_LENGTH - MAX_PREFIX_LENGTH - MAX_SECRET_LENGTH
-                ..MAX_HASH_PREIMAGE_LENGTH,
+                ..MAX_HASH_PREIMAGE_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH,
         )?;
         selecting_string.push(selected_char);
     }

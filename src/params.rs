@@ -8,7 +8,11 @@ pub const SECRET_FR_LENGTH: usize = MAX_SECRET_LENGTH / 31 + 1; // If it's divis
 
 pub const MIN_SUFFIX_LENGTH: usize = 768;
 pub const MAX_SUFFIX_LENGTH: usize = 1024;
-pub const SUFFIX_FR_LENGTH: usize = MAX_SUFFIX_LENGTH / 31 + 1; // If it's divisible without adding 1
+
+// The suffix needs to be padded to MAX_HASH_PREIMAGE_LENGTH
+pub const PADDING_SUFFIX_LENGTH: usize =
+    MAX_HASH_PREIMAGE_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH;
+pub const SUFFIX_FR_LENGTH: usize = PADDING_SUFFIX_LENGTH / 31 + 1; // If it's divisible without adding 1
 
 pub const MIN_PREFIX_BIT_WIDTH: usize = MIN_PREFIX_LENGTH * 8;
 pub const MAX_PREFIX_BIT_WIDTH: usize = MAX_PREFIX_LENGTH * 8;
