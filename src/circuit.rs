@@ -5,7 +5,7 @@ use crate::params::{
     MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_HASH_PREIMAGE_LENGTH, MIN_PREFIX_LENGTH,
     MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH,
 };
-use crate::utils::pack_bits_to_element;
+use crate::utils::{check_external_string_consistency, pack_bits_to_element};
 use ark_ff::{FpParameters, PrimeField};
 use ckb_gadgets::algebra::fr::AllocatedFr;
 use ckb_gadgets::hashes::sha256::sha256;
@@ -47,11 +47,6 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
                 .ok_or(SynthesisError::AssignmentMissing)?,
             MAX_SECRET_LENGTH,
         )?;
-        // assert_eq!(
-        //     self.secret_length.unwrap(),
-        //     secret.get_length().get_value().unwrap(),
-        //     "Not equal to the external secret length."
-        // );
         let prefix = CircuitString::from_string_witness_with_fixed_length(
             cs.ns(|| "convert prefix string witness to CircuitString"),
             &self
@@ -59,11 +54,6 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
                 .ok_or(SynthesisError::AssignmentMissing)?,
             MAX_PREFIX_LENGTH,
         )?;
-        // assert_eq!(
-        //     self.prefix_length,
-        //     prefix.get_length().get_value(),
-        //     "prefix_length calculate wrong."
-        // );
         let suffix = CircuitString::from_string_witness_with_fixed_length(
             cs.ns(|| "convert suffix string witness to CircuitString"),
             &self
@@ -71,11 +61,6 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
                 .ok_or(SynthesisError::AssignmentMissing)?,
             PADDING_SUFFIX_LENGTH,
         )?;
-        // assert_eq!(
-        //     self.suffix_length.unwrap(),
-        //     suffix.get_length().get_value().unwrap(),
-        //     "suffix_length calculate wrong."
-        // );
 
         // get secret hash preimage
         let secret_bits = secret.get_bits_be();
@@ -85,15 +70,15 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
             &secret,
             &suffix,
         )?;
-        signed_message_bytes
-            .iter()
-            .zip(self.message.as_ref().unwrap().iter())
-            .enumerate()
-            .for_each(|(i, (byte, byte1))| {
-                if byte.get_num().get_value().unwrap() != *byte1 {
-                    println!("{}th:{} {}", i, byte.get_num().get_value().unwrap(), *byte1)
-                }
-            });
+        check_external_string_consistency(
+            (
+                signed_message_bytes.iter(),
+                self.message.as_ref().unwrap().iter(),
+            ),
+            (&prefix, self.prefix_length.as_ref()),
+            (&secret, self.secret_length.as_ref()),
+            (&suffix, self.suffix_length.as_ref()),
+        );
 
         // get message hash preimage
         let mut signed_message_bits = Vec::with_capacity(MAX_HASH_PREIMAGE_BIT_WIDTH);

@@ -1,4 +1,5 @@
 use crate::circuit::SecretStringCircuit;
+use crate::circuit_extend::{CircuitByte, CircuitString};
 use crate::params::{
     MAX_HASH_PREIMAGE_LENGTH, MAX_SECRET_LENGTH, MIN_HASH_PREIMAGE_LENGTH, MIN_SECRET_LENGTH,
 };
@@ -22,6 +23,55 @@ pub fn generate_circuit_instance<F: PrimeField>(
     let circuit = secret_witness.into_circuit_instance();
 
     (circuit, public_input)
+}
+
+pub fn check_external_string_consistency<
+    'a,
+    'b,
+    F: PrimeField,
+    U: Iterator<Item = &'a CircuitByte<F>>,
+    T: Iterator<Item = &'b F>,
+>(
+    (message, external_message): (U, T),
+    (prefix, prefix_length): (&CircuitString<F>, Option<&F>),
+    (secret, secret_length): (&CircuitString<F>, Option<&F>),
+    (suffix, suffix_length): (&CircuitString<F>, Option<&F>),
+) {
+    if let (Some(inter_prefix), Some(&prefix_length)) =
+        (prefix.get_length().get_value(), prefix_length)
+    {
+        assert_eq!(
+            prefix_length, inter_prefix,
+            "Not equal to the external prefix length."
+        );
+    }
+    if let (Some(inter_secret), Some(&secret_length)) =
+        (secret.get_length().get_value(), secret_length)
+    {
+        assert_eq!(
+            secret_length, inter_secret,
+            "Not equal to the external secret length."
+        );
+    }
+    if let (Some(inter_suffix), Some(&suffix_length)) =
+        (suffix.get_length().get_value(), suffix_length)
+    {
+        assert_eq!(
+            suffix_length, inter_suffix,
+            "Not equal to the external suffix length."
+        );
+    }
+    message
+        .zip(external_message)
+        .enumerate()
+        .for_each(|(i, (byte1, byte2))| {
+            if let Some(byte) = byte1.get_num().get_value() {
+                if byte != *byte2 {
+                    println!("{}th:{} {}", i, byte, *byte2);
+                }
+                assert_eq!(byte, *byte2, "char{} is not equals", i);
+            }
+        });
 }
 
 pub fn transform_public_input(input: Vec<Vec<u8>>) -> Vec<Fr> {
