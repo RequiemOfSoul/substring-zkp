@@ -47,11 +47,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
                 .ok_or(SynthesisError::AssignmentMissing)?,
             MAX_SECRET_LENGTH,
         )?;
-        assert_eq!(
-            self.secret_length.unwrap(),
-            secret.get_length().get_value().unwrap(),
-            "Not equal to the external secret length."
-        );
+        // assert_eq!(
+        //     self.secret_length.unwrap(),
+        //     secret.get_length().get_value().unwrap(),
+        //     "Not equal to the external secret length."
+        // );
         let prefix = CircuitString::from_string_witness_with_fixed_length(
             cs.ns(|| "convert prefix string witness to CircuitString"),
             &self
@@ -59,11 +59,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
                 .ok_or(SynthesisError::AssignmentMissing)?,
             MAX_PREFIX_LENGTH,
         )?;
-        assert_eq!(
-            self.prefix_length,
-            prefix.get_length().get_value(),
-            "prefix_length calculate wrong."
-        );
+        // assert_eq!(
+        //     self.prefix_length,
+        //     prefix.get_length().get_value(),
+        //     "prefix_length calculate wrong."
+        // );
         let suffix = CircuitString::from_string_witness_with_fixed_length(
             cs.ns(|| "convert suffix string witness to CircuitString"),
             &self
@@ -71,11 +71,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
                 .ok_or(SynthesisError::AssignmentMissing)?,
             PADDING_SUFFIX_LENGTH,
         )?;
-        assert_eq!(
-            self.suffix_length.unwrap(),
-            suffix.get_length().get_value().unwrap(),
-            "suffix_length calculate wrong."
-        );
+        // assert_eq!(
+        //     self.suffix_length.unwrap(),
+        //     suffix.get_length().get_value().unwrap(),
+        //     "suffix_length calculate wrong."
+        // );
 
         // get secret hash preimage
         let secret_bits = secret.get_bits_be();
