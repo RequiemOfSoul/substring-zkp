@@ -321,32 +321,32 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         )?;
         selecting_string.push(selected_char);
     }
-    //
-    // // sixth section
-    // for i in MIN_HASH_PREIMAGE_LENGTH..MAX_HASH_PREIMAGE_LENGTH {
-    //     let nth = CircuitNum::from_fe_with_known_length(
-    //         cs.ns(|| format!("sixth section:{}th", i)),
-    //         || Ok(F::from(i as u128)),
-    //         LENGTH_REPR_BIT_WIDTH,
-    //     )?;
-    //     let index_c = nth.get_num().sub(
-    //         cs.ns(|| format!("sixth section:calculate index_c:{} - a_len - b_len", i)),
-    //         a_add_b_length_cn.get_num(),
-    //     )?;
-    //     let selected_char = search_char(
-    //         cs.ns(|| {
-    //             format!(
-    //                 "sixth section:{}th bit is the sixth section corresponding range",
-    //                 i
-    //             )
-    //         }),
-    //         c,
-    //         &index_c,
-    //         MIN_HASH_PREIMAGE_LENGTH - MAX_PREFIX_LENGTH - MAX_SECRET_LENGTH
-    //             ..MAX_HASH_PREIMAGE_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH,
-    //     )?;
-    //     selecting_string.push(selected_char);
-    // }
+
+    // sixth section
+    for i in MIN_HASH_PREIMAGE_LENGTH..MAX_HASH_PREIMAGE_LENGTH {
+        let nth = CircuitNum::from_fe_with_known_length(
+            cs.ns(|| format!("sixth section:{}th", i)),
+            || Ok(F::from(i as u128)),
+            LENGTH_REPR_BIT_WIDTH,
+        )?;
+        let index_c = nth.get_num().sub(
+            cs.ns(|| format!("sixth section:calculate index_c:{} - a_len - b_len", i)),
+            a_add_b_length_cn.get_num(),
+        )?;
+        let selected_char = search_char(
+            cs.ns(|| {
+                format!(
+                    "sixth section:{}th bit is the sixth section corresponding range",
+                    i
+                )
+            }),
+            c,
+            &index_c,
+            MIN_HASH_PREIMAGE_LENGTH - MAX_PREFIX_LENGTH - MAX_SECRET_LENGTH
+                ..MAX_HASH_PREIMAGE_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH,
+        )?;
+        selecting_string.push(selected_char);
+    }
 
     Ok(selecting_string)
 }
@@ -392,6 +392,6 @@ fn test_secret_circuit() {
     println!("num_constraints: {}", cs.num_constraints());
     println!("unconstrained: {}", cs.find_unconstrained());
     if let Some(err) = cs.which_is_unsatisfied() {
-        println!("error: {}", err);
+        panic!("error: {}", err);
     }
 }
