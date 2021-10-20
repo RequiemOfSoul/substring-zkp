@@ -1,6 +1,8 @@
 use crate::circuit::SecretStringCircuit;
 use crate::params::{
-    MAX_HASH_PREIMAGE_LENGTH, PREFIX_FR_LENGTH, SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
+    MAX_HASH_PREIMAGE_LENGTH, MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH,
+    MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH, PREFIX_FR_LENGTH,
+    SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
 };
 use ark_ff::{BitIteratorBE, PrimeField};
 #[allow(clippy::useless_attribute)]
@@ -93,6 +95,7 @@ impl<F: PrimeField> Default for SecretWitness<F> {
 
 impl<F: PrimeField> SecretWitness<F> {
     fn absorb_prefix(&mut self, prefix: &[u8]) -> &mut Self {
+        assert!(MIN_PREFIX_LENGTH <= prefix.len() && prefix.len() <= MAX_PREFIX_LENGTH);
         let length = prefix.len();
         let mut split_fe_vec = prefix
             .chunks(31)
@@ -104,6 +107,7 @@ impl<F: PrimeField> SecretWitness<F> {
     }
 
     fn absorb_secret(&mut self, secret: &[u8]) -> &mut Self {
+        assert!(MIN_SECRET_LENGTH <= secret.len() && secret.len() <= MAX_SECRET_LENGTH);
         let length = secret.len();
         let mut split_fe_vec = secret
             .chunks(31)
@@ -115,6 +119,7 @@ impl<F: PrimeField> SecretWitness<F> {
     }
 
     fn absorb_suffix(&mut self, suffix: &[u8]) -> &mut Self {
+        assert!(MIN_SUFFIX_LENGTH <= suffix.len() && suffix.len() <= PADDING_SUFFIX_LENGTH);
         let length = suffix.len();
         let mut split_fe_vec = suffix
             .chunks(31)

@@ -47,11 +47,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
                 .ok_or(SynthesisError::AssignmentMissing)?,
             MAX_SECRET_LENGTH,
         )?;
-        // assert_eq!(
-        //     self.secret_length.unwrap(),
-        //     secret.get_length().get_value().unwrap(),
-        //     "Not equal to the external secret length."
-        // );
+        assert_eq!(
+            self.secret_length.unwrap(),
+            secret.get_length().get_value().unwrap(),
+            "Not equal to the external secret length."
+        );
         let prefix = CircuitString::from_string_witness_with_fixed_length(
             cs.ns(|| "convert prefix string witness to CircuitString"),
             &self
@@ -59,11 +59,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
                 .ok_or(SynthesisError::AssignmentMissing)?,
             MAX_PREFIX_LENGTH,
         )?;
-        // assert_eq!(
-        //     self.prefix_length,
-        //     prefix.get_length().get_value(),
-        //     "prefix_length calculate wrong."
-        // );
+        assert_eq!(
+            self.prefix_length,
+            prefix.get_length().get_value(),
+            "prefix_length calculate wrong."
+        );
         let suffix = CircuitString::from_string_witness_with_fixed_length(
             cs.ns(|| "convert suffix string witness to CircuitString"),
             &self
@@ -71,11 +71,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
                 .ok_or(SynthesisError::AssignmentMissing)?,
             PADDING_SUFFIX_LENGTH,
         )?;
-        // assert_eq!(
-        //     self.suffix_length.unwrap(),
-        //     suffix.get_length().get_value().unwrap(),
-        //     "suffix_length calculate wrong."
-        // );
+        assert_eq!(
+            self.suffix_length.unwrap(),
+            suffix.get_length().get_value().unwrap(),
+            "suffix_length calculate wrong."
+        );
 
         // get secret hash preimage
         let secret_bits = secret.get_bits_be();
@@ -85,6 +85,15 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
             &secret,
             &suffix,
         )?;
+        signed_message_bytes
+            .iter()
+            .zip(self.message.as_ref().unwrap().iter())
+            .enumerate()
+            .for_each(|(i, (byte, byte1))| {
+                if byte.get_num().get_value().unwrap() != *byte1 {
+                    println!("{}th:{} {}", i, byte.get_num().get_value().unwrap(), *byte1)
+                }
+            });
 
         // get message hash preimage
         let mut signed_message_bits = Vec::with_capacity(MAX_HASH_PREIMAGE_BIT_WIDTH);
@@ -327,32 +336,32 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         )?;
         selecting_string.push(selected_char);
     }
-
-    // sixth section
-    for i in MIN_HASH_PREIMAGE_LENGTH..MAX_HASH_PREIMAGE_LENGTH {
-        let nth = CircuitNum::from_fe_with_known_length(
-            cs.ns(|| format!("sixth section:{}th", i)),
-            || Ok(F::from(i as u128)),
-            LENGTH_REPR_BIT_WIDTH,
-        )?;
-        let index_c = nth.get_num().sub(
-            cs.ns(|| format!("sixth section:calculate index_c:{} - a_len - b_len", i)),
-            a_add_b_length_cn.get_num(),
-        )?;
-        let selected_char = search_char(
-            cs.ns(|| {
-                format!(
-                    "sixth section:{}th bit is the sixth section corresponding range",
-                    i
-                )
-            }),
-            c,
-            &index_c,
-            MIN_HASH_PREIMAGE_LENGTH - MAX_PREFIX_LENGTH - MAX_SECRET_LENGTH
-                ..MAX_HASH_PREIMAGE_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH,
-        )?;
-        selecting_string.push(selected_char);
-    }
+    //
+    // // sixth section
+    // for i in MIN_HASH_PREIMAGE_LENGTH..MAX_HASH_PREIMAGE_LENGTH {
+    //     let nth = CircuitNum::from_fe_with_known_length(
+    //         cs.ns(|| format!("sixth section:{}th", i)),
+    //         || Ok(F::from(i as u128)),
+    //         LENGTH_REPR_BIT_WIDTH,
+    //     )?;
+    //     let index_c = nth.get_num().sub(
+    //         cs.ns(|| format!("sixth section:calculate index_c:{} - a_len - b_len", i)),
+    //         a_add_b_length_cn.get_num(),
+    //     )?;
+    //     let selected_char = search_char(
+    //         cs.ns(|| {
+    //             format!(
+    //                 "sixth section:{}th bit is the sixth section corresponding range",
+    //                 i
+    //             )
+    //         }),
+    //         c,
+    //         &index_c,
+    //         MIN_HASH_PREIMAGE_LENGTH - MAX_PREFIX_LENGTH - MAX_SECRET_LENGTH
+    //             ..MAX_HASH_PREIMAGE_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH,
+    //     )?;
+    //     selecting_string.push(selected_char);
+    // }
 
     Ok(selecting_string)
 }
@@ -385,10 +394,12 @@ fn test_secret_circuit() {
     let mut cs = TestConstraintSystem::<Fr>::new();
 
     // modify that the global variable: prefix length:1-5, secret length:3-7, suffix length:10-11
-    let secret = "secret";
-    let mut padding_message = "pre_secret_suffix".to_string();
-    padding_message
-        .push_str(&*"0".repeat(crate::params::MAX_HASH_PREIMAGE_LENGTH - padding_message.len()));
+    let padding = "0"; // must be single char, or else fill it to MAX_HASH_PREIMAGE_LENGTH
+    let secret = "christian.schneider@androidloves.me";
+    let mut padding_message = "from:Christian Schneider Christian Schneider Christian Schneider <christian.schneider@androidloves.me>\r\nsubject:this is a test mail\r\ndate:Sat, 14 Mar 2020 21:48:57 +0100\r\nmessage-id:<4c2828df-2dae-74ff-2fa7-e6ac36100341@androidloves.me>\r\nto:mail@kmille.wtf\r\ncontent-type:text/plain; charset=utf-8; format=flowed\r\ncontent-transfer-encoding:7bit\r\ndkim-signature:v=1; a=rsa-sha256; c=relaxed/relaxed; d=androidloves.me; s=2019022801; t=1584218937; h=from:from:reply-to:subject:subject:date:date:message-id:message-id: to:to:cc:content-type:content-type: content-transfer-encoding:content-transfer-encoding; bh=aeLbTnlUQQv2UFEWKHeiL5Q0NjOwj4ktNSInk8rN/P0=; b=".to_string();
+    padding_message.push_str(
+        &*padding.repeat(crate::params::MAX_HASH_PREIMAGE_LENGTH - padding_message.len()),
+    );
 
     let (c, _) = crate::generate_circuit_instance(secret.to_string(), padding_message);
     c.generate_constraints(&mut cs).unwrap();

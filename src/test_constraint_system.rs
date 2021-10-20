@@ -72,7 +72,7 @@ fn proc_lc<F: PrimeField>(terms: &[(Variable, F)]) -> BTreeMap<OrderedVariable, 
     let mut to_remove = vec![];
     for (var, coeff) in map.iter() {
         if coeff.is_zero() {
-            to_remove.push(var.clone())
+            to_remove.push(*var)
         }
     }
 
@@ -196,7 +196,7 @@ impl<F: PrimeField> TestConstraintSystem<F> {
         };
 
         for &(ref a, ref b, ref c, ref name) in &self.constraints {
-            write!(&mut s, "\n").unwrap();
+            writeln!(&mut s).unwrap();
 
             write!(&mut s, "{}: ", name).unwrap();
             pp(&mut s, a);
@@ -206,7 +206,7 @@ impl<F: PrimeField> TestConstraintSystem<F> {
             pp(&mut s, c);
         }
 
-        write!(&mut s, "\n").unwrap();
+        writeln!(&mut s).unwrap();
 
         s
     }
@@ -238,17 +238,17 @@ impl<F: PrimeField> TestConstraintSystem<F> {
 
         for inp in self.inputs.iter() {
             if set.get(&inp.1).is_none() {
-                write!(&mut s, "\n").unwrap();
+                writeln!(&mut s).unwrap();
                 write!(&mut s, "{}", inp.1).unwrap();
-                write!(&mut s, "\n").unwrap();
+                writeln!(&mut s).unwrap();
             }
         }
 
         for inp in self.aux.iter() {
             if set.get(&inp.1).is_none() {
-                write!(&mut s, "\n").unwrap();
+                writeln!(&mut s).unwrap();
                 write!(&mut s, "{}", inp.1).unwrap();
-                write!(&mut s, "\n").unwrap();
+                writeln!(&mut s).unwrap();
             }
         }
 
@@ -444,7 +444,7 @@ impl<F: PrimeField> ConstraintSystem<F> for TestConstraintSystem<F> {
     {
         let name = name_fn().into();
         let path = compute_path(&self.current_namespace, name.clone());
-        self.set_named_obj(path.clone(), NamedObject::Namespace);
+        self.set_named_obj(path, NamedObject::Namespace);
         self.current_namespace.push(name);
     }
 
