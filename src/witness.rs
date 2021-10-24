@@ -1,6 +1,6 @@
 use crate::circuit::SecretStringCircuit;
 use crate::params::{
-    MAX_HASH_PREIMAGE_LENGTH, MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH,
+    CHUNK_WIDTH, MAX_HASH_PREIMAGE_LENGTH, MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH,
     MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH, PREFIX_FR_LENGTH,
     SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
 };
@@ -10,13 +10,21 @@ use sha2::{Digest, Sha256};
 
 #[derive(Clone, Debug)]
 pub struct SecretWitness<F: PrimeField> {
+    // padding bytes
+    prefix_bytes: Vec<u8>,
+    secret_bytes: Vec<u8>,
+    suffix_bytes: Vec<u8>,
+    message_bytes: Vec<u8>,
+
     // (padding, length)
     prefix: (Vec<F>, usize),
     secret: (Vec<F>, usize),
     suffix: (Vec<F>, usize),
-    message_bytes: Vec<F>,
+
+    message_circuit_bytes: Vec<F>,
     pub secret_commitment: Option<F>,
     pub message_hash: Option<F>,
+    pub public_input_hash: Option<F>,
 }
 
 impl<F: PrimeField> SecretWitness<F> {
@@ -38,7 +46,7 @@ impl<F: PrimeField> SecretWitness<F> {
             .absorb_prefix(&prefix)
             .absorb_secret(secret.as_bytes())
             .absorb_suffix(&suffix)
-            .finalize_hash(secret.into_bytes(), message.into_bytes());
+            .finalize_hash(message.into_bytes());
 
         secret_witness
     }
@@ -52,19 +60,37 @@ impl<F: PrimeField> SecretWitness<F> {
             suffix_padding: Some(self.suffix.0),
             suffix_length: Some(F::from(self.suffix.1 as u128)),
             secret: None,
-            message: Some(self.message_bytes),
+            message: Some(self.message_circuit_bytes),
             secret_hash: self.secret_commitment,
             message_hash: self.message_hash,
+            pub_data_hash: self.public_input_hash,
         }
     }
 
-    pub fn get_public_input(&self) -> Vec<F> {
+    // Not circuit's really public input, it's just a formality
+    pub fn get_raw_public_input(&self) -> Vec<F> {
         let mut public_input = Vec::with_capacity(PREFIX_FR_LENGTH + SUFFIX_FR_LENGTH + 2);
         public_input.extend_from_slice(&self.prefix.0);
         public_input.extend_from_slice(&self.suffix.0);
         public_input.push(self.secret_commitment.unwrap());
         public_input.push(self.message_hash.unwrap());
         public_input
+    }
+
+    pub fn get_compress_public_input(&self) -> F {
+        if let Some(public_input) = self.public_input_hash {
+            public_input
+        } else {
+            let secret_commitment = calculate_hash(&self.secret_bytes);
+            let signature_msg_hash = calculate_hash(&self.message_bytes);
+            let public_input_hash = compress_public_input(
+                &self.prefix_bytes,
+                &self.suffix_bytes,
+                &secret_commitment,
+                &signature_msg_hash,
+            );
+            F::read(&*public_input_hash).expect("packed public input hash hash error")
+        }
     }
 
     fn get_prefix(&self) -> &[F] {
@@ -83,74 +109,75 @@ impl<F: PrimeField> SecretWitness<F> {
 impl<F: PrimeField> Default for SecretWitness<F> {
     fn default() -> Self {
         SecretWitness {
+            prefix_bytes: vec![],
+            secret_bytes: vec![],
+            suffix_bytes: vec![],
+            message_bytes: vec![],
             prefix: (vec![Default::default(); PREFIX_FR_LENGTH], 0),
             secret: (vec![Default::default(); SECRET_FR_LENGTH], 0),
             suffix: (vec![Default::default(); SUFFIX_FR_LENGTH], 0),
-            message_bytes: vec![Default::default(); MAX_HASH_PREIMAGE_LENGTH],
+            message_circuit_bytes: vec![Default::default(); MAX_HASH_PREIMAGE_LENGTH],
             secret_commitment: None,
             message_hash: None,
+            public_input_hash: None,
         }
     }
 }
 
 impl<F: PrimeField> SecretWitness<F> {
     fn absorb_prefix(&mut self, prefix: &[u8]) -> &mut Self {
-        assert!(MIN_PREFIX_LENGTH <= prefix.len() && prefix.len() <= MAX_PREFIX_LENGTH);
         let length = prefix.len();
-        let mut split_fe_vec = prefix
-            .chunks(31)
-            .map(part_string_padding)
-            .collect::<Vec<_>>();
-        split_fe_vec.resize(PREFIX_FR_LENGTH, F::zero());
+        assert!(MIN_PREFIX_LENGTH <= length && length <= MAX_PREFIX_LENGTH);
+        let (split_fe_vec, padding_bytes) = append_fr_chunk_fixed_width(prefix, PREFIX_FR_LENGTH);
+
+        self.prefix_bytes = padding_bytes;
         self.prefix = (split_fe_vec, length);
         self
     }
 
     fn absorb_secret(&mut self, secret: &[u8]) -> &mut Self {
-        assert!(MIN_SECRET_LENGTH <= secret.len() && secret.len() <= MAX_SECRET_LENGTH);
         let length = secret.len();
-        let mut split_fe_vec = secret
-            .chunks(31)
-            .map(part_string_padding)
-            .collect::<Vec<_>>();
-        split_fe_vec.resize(SECRET_FR_LENGTH, F::zero());
+        assert!(MIN_SECRET_LENGTH <= length && length <= MAX_SECRET_LENGTH);
+
+        let (split_fe_vec, padding_bytes) = append_fr_chunk_fixed_width(secret, SECRET_FR_LENGTH);
+
+        self.secret_bytes = padding_bytes;
         self.secret = (split_fe_vec, length);
         self
     }
 
     fn absorb_suffix(&mut self, suffix: &[u8]) -> &mut Self {
-        assert!(MIN_SUFFIX_LENGTH <= suffix.len() && suffix.len() <= PADDING_SUFFIX_LENGTH);
         let length = suffix.len();
-        let mut split_fe_vec = suffix
-            .chunks(31)
-            .map(part_string_padding)
-            .collect::<Vec<_>>();
-        split_fe_vec.resize(SUFFIX_FR_LENGTH, F::zero());
+        assert!(MIN_SUFFIX_LENGTH <= length && length <= PADDING_SUFFIX_LENGTH);
+
+        let (split_fe_vec, padding_bytes) = append_fr_chunk_fixed_width(suffix, SUFFIX_FR_LENGTH);
+
+        self.suffix_bytes = padding_bytes;
         self.suffix = (split_fe_vec, length);
         self
     }
 
-    fn finalize_hash(&mut self, secret: Vec<u8>, message: Vec<u8>) {
-        let mut secret_padding = secret;
-        secret_padding.resize(SECRET_FR_LENGTH * 31, 0);
+    fn finalize_hash(&mut self, message: Vec<u8>) {
+        let secret_commitment = calculate_hash(&self.secret_bytes);
+        let signature_msg_hash = calculate_hash(&self.message_bytes);
 
-        let mut h = Sha256::new();
-        h.update(&secret_padding);
-        let mut secret_commitment = h.finalize().to_vec();
-        secret_commitment.reverse();
-        secret_commitment[31] &= 0x1f;
+        // for reduce verification key size.
+        let public_input_hash = compress_public_input(
+            &self.prefix_bytes,
+            &self.suffix_bytes,
+            &secret_commitment,
+            &signature_msg_hash,
+        );
 
-        let mut h = Sha256::new();
-        h.update(&message);
-        let mut signature_msg_hash = h.finalize().to_vec();
-        signature_msg_hash.reverse();
-        signature_msg_hash[31] &= 0x1f;
+        self.message_circuit_bytes = message.iter().map(|&byte| F::from(byte as u128)).collect();
+        self.message_bytes = message;
 
-        self.message_bytes = message.iter().map(|&byte| F::from(byte as u128)).collect();
         self.secret_commitment =
             Some(F::read(&*secret_commitment).expect("packed secret commitment error"));
         self.message_hash =
             Some(F::read(&*signature_msg_hash).expect("packed signature message hash error"));
+        self.public_input_hash =
+            Some(F::read(&*public_input_hash).expect("packed public input hash hash error"));
     }
 }
 
@@ -158,6 +185,17 @@ fn part_string_padding<F: PrimeField>(part: &[u8]) -> F {
     let mut part_vec = part.to_vec();
     part_vec.resize(32, 0);
     F::read(&*part_vec).expect("pack part string as field element")
+}
+
+pub fn calculate_hash(preimage: &[u8]) -> Vec<u8> {
+    let mut h = Sha256::new();
+    h.update(&preimage);
+
+    let mut hash_result = h.finalize().to_vec();
+    hash_result.reverse();
+    hash_result[31] &= 0x1f;
+
+    hash_result
 }
 
 pub fn from_be_bytes(bytes: &[u8]) -> Vec<bool> {
@@ -192,5 +230,45 @@ pub fn append_be_fixed_width<F: PrimeField>(content: &mut Vec<bool>, x: &F, widt
     content.extend(bits);
 }
 
-#[test]
-fn test_secret_witness() {}
+pub fn append_fr_chunk_fixed_width<F: PrimeField>(
+    raw_bytes: &[u8],
+    width: usize,
+) -> (Vec<F>, Vec<u8>) {
+    let mut split_fe_vec = raw_bytes
+        .chunks(CHUNK_WIDTH)
+        .map(part_string_padding)
+        .collect::<Vec<_>>();
+    split_fe_vec.resize(width, F::zero());
+
+    let padding_bytes = split_fe_vec
+        .iter()
+        .map(|single_fr| {
+            let mut reader = Vec::with_capacity(32);
+            single_fr.write(&mut reader).unwrap();
+            reader
+        })
+        .flatten()
+        .collect();
+    (split_fe_vec, padding_bytes)
+}
+
+pub fn compress_public_input(
+    prefix_bytes: &[u8],
+    suffix_bytes: &[u8],
+    secret_commitment: &[u8],
+    msg_hash: &[u8],
+) -> Vec<u8> {
+    let mut public_inputs = Vec::new();
+    public_inputs.extend_from_slice(prefix_bytes);
+    public_inputs.extend_from_slice(suffix_bytes);
+    public_inputs.extend_from_slice(secret_commitment);
+    public_inputs.extend_from_slice(msg_hash);
+
+    let mut h = Sha256::new();
+    h.update(&public_inputs);
+    let mut public_input_hash = h.finalize().to_vec();
+    public_input_hash.reverse();
+    public_input_hash[31] &= 0x1f;
+
+    public_input_hash
+}

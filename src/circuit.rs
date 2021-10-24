@@ -3,7 +3,7 @@ use crate::circuit_extend::{CircuitNum, ExtendFunction};
 use crate::params::{
     LENGTH_REPR_BIT_WIDTH, MAX_HASH_PREIMAGE_BIT_WIDTH, MAX_HASH_PREIMAGE_LENGTH,
     MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_HASH_PREIMAGE_LENGTH, MIN_PREFIX_LENGTH,
-    MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH,
+    MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH, PUBLIC_INPUTS_BIT_WIDTH,
 };
 use crate::utils::{check_external_string_consistency, pack_bits_to_element};
 use ark_ff::{FpParameters, PrimeField};
@@ -25,6 +25,7 @@ pub struct SecretStringCircuit<F: PrimeField> {
 
     pub secret_hash: Option<F>,
     pub message_hash: Option<F>,
+    pub pub_data_hash: Option<F>,
 }
 
 impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
@@ -38,6 +39,9 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         })?;
         let message_commitment = AllocatedFr::alloc(cs.ns(|| "signed message commitment"), || {
             self.message_hash.ok_or(SynthesisError::AssignmentMissing)
+        })?;
+        let pub_data_hash = AllocatedFr::alloc(cs.ns(|| "signed message commitment"), || {
+            self.pub_data_hash.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
         let secret = CircuitString::from_string_witness_with_fixed_length(
@@ -119,11 +123,29 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
             |lc| lc + final_message_hash.get_variable(),
         );
 
-        // enforce public input inputize
-        prefix.inputize(cs.ns(|| "inputize prefix"))?;
-        suffix.inputize(cs.ns(|| "inputize suffix"))?;
-        secret_commitment.inputize(cs.ns(|| "inputize pub_data"))?;
-        message_commitment.inputize(cs.ns(|| "inputize signature message hash"))?;
+        // for reduce verification key size.
+        let mut pub_data_bits = Vec::with_capacity(PUBLIC_INPUTS_BIT_WIDTH);
+        pub_data_bits.extend(prefix.get_bits_be());
+        pub_data_bits.extend(suffix.get_bits_be());
+        pub_data_bits.extend(secret_commitment_bits);
+        pub_data_bits.extend(message_commitment_bits);
+
+        let mut pub_data_commitment_bits =
+            sha256(cs.ns(|| "calculate public inputs hash"), &pub_data_bits)?;
+        pub_data_commitment_bits.reverse();
+        pub_data_commitment_bits.truncate(F::Params::CAPACITY as usize);
+
+        let public_input_commitment = pack_bits_to_element(
+            cs.ns(|| "final public inputs hash"),
+            &pub_data_commitment_bits,
+        )?;
+        cs.enforce(
+            || "enforce external public inputs hash equality",
+            |lc| lc + public_input_commitment.get_variable(),
+            |lc| lc + CS::one(),
+            |lc| lc + pub_data_hash.get_variable(),
+        );
+        public_input_commitment.inputize(cs.ns(|| "inputize final public input"))?;
         Ok(())
     }
 }

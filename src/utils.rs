@@ -1,9 +1,13 @@
 use crate::circuit::SecretStringCircuit;
 use crate::circuit_extend::{CircuitByte, CircuitString};
 use crate::params::{
-    MAX_HASH_PREIMAGE_LENGTH, MAX_SECRET_LENGTH, MIN_HASH_PREIMAGE_LENGTH, MIN_SECRET_LENGTH,
+    MAX_HASH_PREIMAGE_LENGTH, MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_HASH_PREIMAGE_LENGTH,
+    MIN_PREFIX_LENGTH, MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH,
+    PREFIX_FR_LENGTH, SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
 };
-use crate::witness::SecretWitness;
+use crate::witness::{
+    append_fr_chunk_fixed_width, calculate_hash, compress_public_input, SecretWitness,
+};
 use ark_bn254::fr::Fr;
 use ark_ff::{FpParameters, PrimeField};
 use ckb_gadgets::algebra::boolean::Boolean;
@@ -19,10 +23,45 @@ pub fn generate_circuit_instance<F: PrimeField>(
 
     let secret_witness = SecretWitness::<F>::generate_witness(secret, message);
 
-    let public_input = secret_witness.get_public_input();
+    let public_input = secret_witness.get_compress_public_input();
     let circuit = secret_witness.into_circuit_instance();
 
-    (circuit, public_input)
+    (circuit, vec![public_input])
+}
+
+pub fn calculate_public_input<F: PrimeField>(secret: String, message: String) -> F {
+    let split_message = message.split(&secret).collect::<Vec<&str>>();
+    let prefix = split_message
+        .first()
+        .expect("Secret don't split message")
+        .to_string()
+        .into_bytes();
+    let suffix = split_message
+        .last()
+        .expect("Secret don't split message")
+        .to_string()
+        .into_bytes();
+
+    assert!(MIN_PREFIX_LENGTH <= prefix.len() && prefix.len() <= MAX_PREFIX_LENGTH);
+    let (_, prefix_padding) = append_fr_chunk_fixed_width::<F>(&prefix, PREFIX_FR_LENGTH);
+
+    assert!(MIN_SECRET_LENGTH <= secret.len() && secret.len() <= MAX_SECRET_LENGTH);
+    let (_, secret_padding) = append_fr_chunk_fixed_width::<F>(secret.as_bytes(), SECRET_FR_LENGTH);
+
+    assert!(MIN_SUFFIX_LENGTH <= suffix.len() && suffix.len() <= PADDING_SUFFIX_LENGTH);
+    let (_, suffix_padding) = append_fr_chunk_fixed_width::<F>(&prefix, SUFFIX_FR_LENGTH);
+
+    let secret_commitment = calculate_hash(&secret_padding);
+    let signature_msg_hash = calculate_hash(message.as_bytes());
+
+    let public_input_hash = compress_public_input(
+        &prefix_padding,
+        &suffix_padding,
+        &secret_commitment,
+        &signature_msg_hash,
+    );
+
+    F::read(&*public_input_hash).expect("packed public input hash hash error")
 }
 
 pub fn check_external_string_consistency<
