@@ -7,7 +7,6 @@ use crate::params::{
 };
 use crate::utils::{check_external_string_consistency, pack_bits_to_element};
 use ark_ff::{FpParameters, PrimeField};
-use ckb_gadgets::algebra::boolean::Boolean;
 use ckb_gadgets::algebra::fr::AllocatedFr;
 use ckb_gadgets::hashes::sha256::sha256;
 use ckb_r1cs::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
