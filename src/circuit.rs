@@ -93,14 +93,18 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         }
 
         // calculate secret hash
+        assert!(256 >= F::Params::CAPACITY, "select correct F bits length");
+        let padding = vec![Boolean::constant(false); 256 - F::Params::CAPACITY as usize];
         let mut secret_commitment_bits =
             sha256(cs.ns(|| "calculate secret string hash"), &secret_bits)?;
         secret_commitment_bits.reverse();
+        secret_commitment_bits[F::Params::CAPACITY as usize..].copy_from_slice(&padding);
 
         // calculate message hash
         let mut message_commitment_bits =
             sha256(cs.ns(|| "calc signed message hash"), &signed_message_bits)?;
         message_commitment_bits.reverse();
+        message_commitment_bits[F::Params::CAPACITY as usize..].copy_from_slice(&padding);
 
         // Check whether the secret hash is correctly calculated
         let final_secret_hash = pack_bits_to_element(
@@ -137,11 +141,10 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         let mut pub_data_commitment_bits =
             sha256(cs.ns(|| "calculate public inputs hash"), &pub_data_bits)?;
         pub_data_commitment_bits.reverse();
-        pub_data_commitment_bits.truncate(F::Params::CAPACITY as usize);
 
         let public_input_commitment = pack_bits_to_element(
             cs.ns(|| "final public inputs hash"),
-            &pub_data_commitment_bits,
+            &pub_data_commitment_bits[0..F::Params::CAPACITY as usize],
         )?;
         cs.enforce(
             || "enforce external public inputs hash equality",
