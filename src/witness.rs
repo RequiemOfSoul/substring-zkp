@@ -1,8 +1,8 @@
 use crate::circuit::SecretStringCircuit;
 use crate::params::{
-    CHUNK_WIDTH, FR_CHUNKS_BIT_WIDTH, MAX_HASH_PREIMAGE_LENGTH, MAX_PREFIX_LENGTH,
-    MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH, MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH,
-    PADDING_SUFFIX_LENGTH, PREFIX_FR_LENGTH, SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
+    CHUNK_WIDTH, MAX_HASH_PREIMAGE_LENGTH, MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH,
+    MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH, PREFIX_FR_LENGTH,
+    SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
 };
 use ark_ff::{BitIteratorBE, PrimeField};
 #[allow(clippy::useless_attribute)]
@@ -158,6 +158,9 @@ impl<F: PrimeField> SecretWitness<F> {
     }
 
     fn finalize_hash(&mut self, message: Vec<u8>) {
+        self.message_circuit_bytes = message.iter().map(|&byte| F::from(byte as u128)).collect();
+        self.message_bytes = message;
+
         let secret_commitment = calculate_hash(&self.secret_bytes);
         let signature_msg_hash = calculate_hash(&self.message_bytes);
 
@@ -168,9 +171,6 @@ impl<F: PrimeField> SecretWitness<F> {
             &secret_commitment,
             &signature_msg_hash,
         );
-
-        self.message_circuit_bytes = message.iter().map(|&byte| F::from(byte as u128)).collect();
-        self.message_bytes = message;
 
         self.secret_commitment =
             Some(F::read(&*secret_commitment).expect("packed secret commitment error"));
