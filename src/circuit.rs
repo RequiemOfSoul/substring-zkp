@@ -7,6 +7,7 @@ use crate::params::{
 };
 use crate::utils::{check_external_string_consistency, pack_bits_to_element};
 use ark_ff::{FpParameters, PrimeField};
+use ckb_gadgets::algebra::boolean::Boolean;
 use ckb_gadgets::algebra::fr::AllocatedFr;
 use ckb_gadgets::hashes::sha256::sha256;
 use ckb_r1cs::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
@@ -95,17 +96,17 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         let mut secret_commitment_bits =
             sha256(cs.ns(|| "calculate secret string hash"), &secret_bits)?;
         secret_commitment_bits.reverse();
-        secret_commitment_bits.truncate(F::Params::CAPACITY as usize);
 
         // calculate message hash
         let mut message_commitment_bits =
             sha256(cs.ns(|| "calc signed message hash"), &signed_message_bits)?;
         message_commitment_bits.reverse();
-        message_commitment_bits.truncate(F::Params::CAPACITY as usize);
 
         // Check whether the secret hash is correctly calculated
-        let final_secret_hash =
-            pack_bits_to_element(cs.ns(|| "final secret hash"), &secret_commitment_bits)?;
+        let final_secret_hash = pack_bits_to_element(
+            cs.ns(|| "final secret hash"),
+            &secret_commitment_bits[0..F::Params::CAPACITY as usize],
+        )?;
         cs.enforce(
             || "enforce external secret hash equality",
             |lc| lc + secret_commitment.get_variable(),
@@ -114,8 +115,10 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         );
 
         // Check whether the signed message hash is correctly calculated
-        let final_message_hash =
-            pack_bits_to_element(cs.ns(|| "final message hash"), &message_commitment_bits)?;
+        let final_message_hash = pack_bits_to_element(
+            cs.ns(|| "final message hash"),
+            &message_commitment_bits[0..F::Params::CAPACITY as usize],
+        )?;
         cs.enforce(
             || "enforce external message hash equality",
             |lc| lc + message_commitment.get_variable(),
