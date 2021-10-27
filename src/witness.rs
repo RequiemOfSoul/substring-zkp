@@ -2,7 +2,7 @@ use crate::circuit::SecretStringCircuit;
 use crate::params::{
     CHUNK_WIDTH, MAX_HASH_PREIMAGE_LENGTH, MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH,
     MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH, PREFIX_FR_LENGTH,
-    SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
+    PUBLIC_INPUTS_BYTES_WIDTH, SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
 };
 use ark_ff::{BitIteratorBE, PrimeField};
 #[allow(clippy::useless_attribute)]
@@ -257,6 +257,7 @@ pub fn compress_public_input(
     public_inputs.extend_from_slice(suffix_bytes);
     public_inputs.extend_from_slice(secret_commitment);
     public_inputs.extend_from_slice(msg_hash);
+    public_inputs.resize(PUBLIC_INPUTS_BYTES_WIDTH, 0);
 
     let mut h = Sha256::new();
     h.update(&public_inputs);
