@@ -232,24 +232,17 @@ pub fn append_be_fixed_width<F: PrimeField>(content: &mut Vec<bool>, x: &F, widt
 
 pub fn append_fr_chunk_fixed_width<F: PrimeField>(
     raw_bytes: &[u8],
-    width: usize,
+    number_frs: usize,
 ) -> (Vec<F>, Vec<u8>) {
     let mut split_fe_vec = raw_bytes
         .chunks(CHUNK_WIDTH)
         .map(part_string_padding)
         .collect::<Vec<_>>();
-    split_fe_vec.resize(width, F::zero());
+    split_fe_vec.resize(number_frs, F::zero());
 
-    let padding_bytes = split_fe_vec
-        .iter()
-        .map(|single_fr| {
-            let mut reader = Vec::with_capacity(32);
-            single_fr.write(&mut reader).unwrap();
-            reader.truncate(FR_CHUNKS_BIT_WIDTH);
-            reader
-        })
-        .flatten()
-        .collect();
+    let mut padding_bytes = raw_bytes.to_vec();
+    padding_bytes.resize(number_frs * CHUNK_WIDTH, 0);
+
     (split_fe_vec, padding_bytes)
 }
 
