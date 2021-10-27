@@ -1,6 +1,6 @@
 use crate::circuit_extend::circuit_num::get_bits_le_fixed;
 use crate::circuit_extend::{CircuitNum, ExtendFunction};
-use crate::params::LENGTH_REPR_BIT_WIDTH;
+use crate::params::{CHUNK_WIDTH, FR_CHUNKS_BIT_WIDTH, LENGTH_REPR_BIT_WIDTH};
 use crate::utils::{calculate_ascii_char, pack_bits_to_element};
 use ark_ff::{FpParameters, PrimeField};
 use ark_std::convert::TryInto;
@@ -23,14 +23,14 @@ impl<F: PrimeField> CircuitString<F> {
         max_length: usize,
     ) -> Result<Self, SynthesisError> {
         assert!(
-            (string_witness.len() - 1) * 31 <= max_length
-                && max_length <= string_witness.len() * 31,
+            (string_witness.len() - 1) * CHUNK_WIDTH <= max_length
+                && max_length <= string_witness.len() * CHUNK_WIDTH,
             "string witness padding error"
         );
-        let split_length = if max_length % 31 == 0 {
-            max_length / 31
+        let split_length = if max_length % CHUNK_WIDTH == 0 {
+            max_length / CHUNK_WIDTH
         } else {
-            max_length / 31 + 1
+            max_length / CHUNK_WIDTH + 1
         };
 
         let mut packed_nums = Vec::with_capacity(split_length);
@@ -41,7 +41,7 @@ impl<F: PrimeField> CircuitString<F> {
             let packed_split = CircuitNum::from_fe_with_known_length(
                 cs.ns(|| format!("packed {}th section Fr", i)),
                 || Ok(*split_fe),
-                248,
+                FR_CHUNKS_BIT_WIDTH,
             )?;
             for (j, bits) in packed_split.get_bits_le().chunks_exact(8).enumerate() {
                 calculate_ascii_char(

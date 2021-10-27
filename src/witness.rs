@@ -1,8 +1,8 @@
 use crate::circuit::SecretStringCircuit;
 use crate::params::{
-    CHUNK_WIDTH, MAX_HASH_PREIMAGE_LENGTH, MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH,
-    MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH, PREFIX_FR_LENGTH,
-    SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
+    CHUNK_WIDTH, FR_CHUNKS_BIT_WIDTH, MAX_HASH_PREIMAGE_LENGTH, MAX_PREFIX_LENGTH,
+    MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH, MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH,
+    PADDING_SUFFIX_LENGTH, PREFIX_FR_LENGTH, SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
 };
 use ark_ff::{BitIteratorBE, PrimeField};
 #[allow(clippy::useless_attribute)]
@@ -245,6 +245,7 @@ pub fn append_fr_chunk_fixed_width<F: PrimeField>(
         .map(|single_fr| {
             let mut reader = Vec::with_capacity(32);
             single_fr.write(&mut reader).unwrap();
+            reader.truncate(FR_CHUNKS_BIT_WIDTH);
             reader
         })
         .flatten()

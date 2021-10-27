@@ -7,6 +7,7 @@ use crate::params::{
 };
 use crate::utils::{check_external_string_consistency, pack_bits_to_element};
 use ark_ff::{FpParameters, PrimeField};
+use ckb_gadgets::algebra::boolean::Boolean;
 use ckb_gadgets::algebra::fr::AllocatedFr;
 use ckb_gadgets::hashes::sha256::sha256;
 use ckb_r1cs::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
@@ -131,6 +132,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         pub_data_bits.extend(suffix.get_bits_be());
         pub_data_bits.extend(secret_commitment_bits);
         pub_data_bits.extend(message_commitment_bits);
+        pub_data_bits.resize(PUBLIC_INPUTS_BIT_WIDTH, Boolean::constant(false));
 
         let mut pub_data_commitment_bits =
             sha256(cs.ns(|| "calculate public inputs hash"), &pub_data_bits)?;
