@@ -40,7 +40,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         let message_commitment = AllocatedFr::alloc(cs.ns(|| "signed message commitment"), || {
             self.message_hash.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        let pub_data_hash = AllocatedFr::alloc(cs.ns(|| "signed message commitment"), || {
+        let pub_data_hash = AllocatedFr::alloc(cs.ns(|| "signed pub data commitment"), || {
             self.pub_data_hash.ok_or(SynthesisError::AssignmentMissing)
         })?;
 
