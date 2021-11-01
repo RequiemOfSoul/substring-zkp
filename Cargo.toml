@@ -27,3 +27,11 @@ blake2s_simd = "0.5"
 version = "0.2.0"
 default-features = false
 
+[[bin]]
+name = "substring"
+path = "src/main.rs"
+
+[lib]
+name = "substring_zkp"
+path = "src/lib.rs"
+
