@@ -6,3 +6,5 @@ pub mod params;
 pub mod test_constraint_system;
 pub mod utils;
 pub mod witness;
+
+pub use utils::generate_circuit_instance;

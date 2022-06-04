@@ -2,7 +2,7 @@ use crate::circuit_extend::{CircuitByte, CircuitString};
 use crate::circuit_extend::{CircuitNum, ExtendFunction};
 use crate::params::{
     LENGTH_REPR_BIT_WIDTH, MAX_HASH_PREIMAGE_BIT_WIDTH, MAX_HASH_PREIMAGE_LENGTH,
-    MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_HASH_PREIMAGE_LENGTH, MIN_PREFIX_LENGTH,
+    MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH,
     MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH,
 };
 use crate::utils::{check_external_string_consistency, pack_bits_to_element};
@@ -152,9 +152,9 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         selecting_string.push(a[i].clone());
     }
 
-    // second section
+    // second section (range increasing:b: 0-6, fixed range:a)
     for i in MIN_PREFIX_LENGTH..MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH {
-        let nth = CircuitNum::from_fe_with_known_length(
+        let nth = CircuitNum::from_fixed_fe_with_known_length(
             cs.ns(|| format!("Second section:{}th", i)),
             || Ok(F::from(i as u128)),
             LENGTH_REPR_BIT_WIDTH,
@@ -163,17 +163,11 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             cs.ns(|| format!("Second section:calculate index_a:{} - a_len", i)),
             a_length.get_num(),
         )?;
-        let searched_a_char = search_char(
-            cs.ns(|| format!("Second section:search a {}th char", i)),
-            a,
-            nth.get_num(),
-            MIN_PREFIX_LENGTH..MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH,
-        )?;
         let searched_b_char = search_char(
             cs.ns(|| format!("Second section:search b {}th char", i)),
             b,
             &index_b,
-            0..MIN_SECRET_LENGTH,
+            0..i - MIN_PREFIX_LENGTH,
         )?;
         let selected_char = CircuitByte::select_ifle_with_unchecked(
             cs.ns(|| {
@@ -182,7 +176,7 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
                     i
                 )
             }),
-            &searched_a_char,
+            &a[i],
             &searched_b_char,
             &nth,
             a_length,
@@ -190,10 +184,10 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         selecting_string.push(selected_char);
     }
 
-    // third section
-    assert!(MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH <= MAX_PREFIX_LENGTH);
-    for i in MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH..MAX_PREFIX_LENGTH {
-        let nth = CircuitNum::from_fe_with_known_length(
+    // third section (range increasing:b: 6-64,c:0-6, fixed range:a)
+    assert!(MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH <= MIN_PREFIX_LENGTH + MAX_SECRET_LENGTH);
+    for i in MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH..MIN_PREFIX_LENGTH + MAX_SECRET_LENGTH {
+        let nth = CircuitNum::from_fixed_fe_with_known_length(
             cs.ns(|| format!("Third section:{}th", i)),
             || Ok(F::from(i as u128)),
             LENGTH_REPR_BIT_WIDTH,
@@ -206,23 +200,17 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             cs.ns(|| format!("Third section:calculate index_c={} - a_len - b_len", i)),
             a_add_b_length_cn.get_num(),
         )?;
-        let searched_a_char = search_char(
-            cs.ns(|| format!("Third section:search a {}th char", i)),
-            a,
-            nth.get_num(),
-            MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH..MAX_PREFIX_LENGTH,
-        )?;
         let searched_b_char = search_char(
             cs.ns(|| format!("Third section:search b {}th char", i)),
             b,
             &index_b,
-            0..MAX_PREFIX_LENGTH - MIN_PREFIX_LENGTH,
+            0..i - MIN_PREFIX_LENGTH,
         )?;
         let searched_c_char = search_char(
             cs.ns(|| format!("Third section:search c {}th char", i)),
             c,
             &index_c,
-            0..MAX_PREFIX_LENGTH - MIN_SECRET_LENGTH - MIN_PREFIX_LENGTH,
+            0..i - MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH,
         )?;
 
         let selected_char = {
@@ -233,7 +221,7 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
                         i
                     )
                 }),
-                &searched_a_char,
+                &a[i],
                 &searched_b_char,
                 &nth,
                 a_length,
@@ -254,40 +242,156 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         selecting_string.push(selected_char);
     }
 
-    // fourth section
-    for i in MAX_PREFIX_LENGTH..MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH {
-        let nth = CircuitNum::from_fe_with_known_length(
-            cs.ns(|| format!("Fourth section:{}th", i)),
+    // fourth section (range increasing: c:6-128, fixed range:a, b)
+    assert!(MIN_PREFIX_LENGTH + MAX_SECRET_LENGTH <= MIN_PREFIX_LENGTH + MIN_PREFIX_LENGTH + MIN_SUFFIX_LENGTH);
+    for i in MIN_PREFIX_LENGTH + MAX_SECRET_LENGTH..MIN_PREFIX_LENGTH + MIN_PREFIX_LENGTH + MIN_SUFFIX_LENGTH {
+        let nth = CircuitNum::from_fixed_fe_with_known_length(
+            cs.ns(|| format!("fourth section:{}th", i)),
             || Ok(F::from(i as u128)),
             LENGTH_REPR_BIT_WIDTH,
         )?;
         let index_b = nth.get_num().sub(
-            cs.ns(|| format!("Fourth section:calculate index_b:{} - a_len", i)),
+            cs.ns(|| format!("fourth section:calculate index_b={} - a_len", i)),
             a_length.get_num(),
         )?;
         let index_c = nth.get_num().sub(
-            cs.ns(|| format!("Fourth section:calculate index_c:{} - a_len - b_len", i)),
+            cs.ns(|| format!("fourth section:calculate index_c={} - a_len - b_len", i)),
             a_add_b_length_cn.get_num(),
         )?;
         let searched_b_char = search_char(
-            cs.ns(|| format!("Fourth section:search b {}th char", i)),
+            cs.ns(|| format!("fourth section:search b {}th char", i)),
             b,
             &index_b,
             0..MAX_SECRET_LENGTH,
         )?;
         let searched_c_char = search_char(
-            cs.ns(|| format!("Fourth section:search c {}th char", i)),
+            cs.ns(|| format!("fourth section:search c {}th char", i)),
             c,
             &index_c,
-            0..MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH,
+            0..i - MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH,
+        )?;
+
+        let selected_char = {
+            let selected_char = CircuitByte::select_ifle_with_unchecked(
+                cs.ns(|| {
+                    format!(
+                        "fourth section:{}th bit is the third section i < a_length",
+                        i
+                    )
+                }),
+                &a[i],
+                &searched_b_char,
+                &nth,
+                a_length,
+            )?;
+            CircuitByte::select_ifle_with_unchecked(
+                cs.ns(|| {
+                    format!(
+                        "fourth section:{}th bit is the third section i < a_add_b_length",
+                        i
+                    )
+                }),
+                &selected_char,
+                &searched_c_char,
+                &nth,
+                &a_add_b_length_cn,
+            )?
+        };
+        selecting_string.push(selected_char);
+    }
+
+    // fifth section (range increasing: c:128-245, fixed range:a, b)
+    assert!(MIN_PREFIX_LENGTH + MIN_PREFIX_LENGTH + MIN_SUFFIX_LENGTH <= MAX_PREFIX_LENGTH);
+    for i in MIN_PREFIX_LENGTH + MIN_PREFIX_LENGTH + MIN_SUFFIX_LENGTH..MAX_PREFIX_LENGTH {
+        let nth = CircuitNum::from_fixed_fe_with_known_length(
+            cs.ns(|| format!("fifth section:{}th", i)),
+            || Ok(F::from(i as u128)),
+            LENGTH_REPR_BIT_WIDTH,
+        )?;
+        let index_b = nth.get_num().sub(
+            cs.ns(|| format!("fifth section:calculate index_b:{} - a_len", i)),
+            a_length.get_num(),
+        )?;
+        let index_c = nth.get_num().sub(
+            cs.ns(|| format!("fifth section:calculate index_c:{} - a_len - b_len", i)),
+            a_add_b_length_cn.get_num(),
+        )?;
+        let searched_b_char = search_char(
+            cs.ns(|| format!("fifth section:search b {}th char", i)),
+            b,
+            &index_b,
+            0..MAX_SECRET_LENGTH,
+        )?;
+        let searched_c_char = search_char(
+            cs.ns(|| format!("fifth section:search c {}th char", i)),
+            c,
+            &index_c,
+            0..i - MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH,
+        )?;
+        let selected_char = {
+            let selected_char = CircuitByte::select_ifle_with_unchecked(
+                cs.ns(|| {
+                    format!(
+                        "fifth section:{}th bit is the fifth section i < a_length",
+                        i
+                    )
+                }),
+                &a[i],
+                &searched_b_char,
+                &nth,
+                a_length,
+            )?;
+            CircuitByte::select_ifle_with_unchecked(
+                cs.ns(|| {
+                    format!(
+                        "fifth section:{}th bit is the fifth section i < a_add_b_length",
+                        i
+                    )
+                }),
+                &selected_char,
+                &searched_c_char,
+                &nth,
+                &a_add_b_length_cn,
+            )?
+        };
+        selecting_string.push(selected_char);
+    }
+
+    // sixth section (range increasing: c:245-256, range decreasing: b:0-64)
+    assert!(MAX_PREFIX_LENGTH <= MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH);
+    for i in MAX_PREFIX_LENGTH..MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH {
+        let nth = CircuitNum::from_fixed_fe_with_known_length(
+            cs.ns(|| format!("sixth section:{}th", i)),
+            || Ok(F::from(i as u128)),
+            LENGTH_REPR_BIT_WIDTH,
+        )?;
+        let index_b = a_add_b_length_cn.get_num().sub(
+            cs.ns(|| format!("sixth section:calculate index_b:a_len + b_len - {}", i)),
+            nth.get_num(),
+        )?;
+        let index_c = nth.get_num().sub(
+            cs.ns(|| format!("sixth section:calculate index_c:{} - a_len - b_len", i)),
+            a_add_b_length_cn.get_num(),
+        )?;
+        let searched_b_char = search_char(
+            cs.ns(|| format!("sixth section:search b {}th char", i)),
+            b,
+            &index_b,
+            i - MAX_PREFIX_LENGTH..MAX_SECRET_LENGTH,
+        )?;
+        let searched_c_char = search_char(
+            cs.ns(|| format!("sixth section:search c {}th char", i)),
+            c,
+            &index_c,
+            0..i - MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH,
         )?;
         let selected_char = CircuitByte::select_ifle_with_unchecked(
-            cs.ns(|| {
+            cs.ns(||
                 format!(
-                    "Fourth section:{}th bit is the fourth section corresponding range",
+                    "sixth section:{}th bit is the sixth section corresponding range",
                     i
                 )
-            }),
+            ),
             &searched_b_char,
             &searched_c_char,
             &nth,
@@ -296,53 +400,26 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         selecting_string.push(selected_char);
     }
 
-    // fifth section
-    assert!(MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH <= MIN_HASH_PREIMAGE_LENGTH);
-    for i in MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH..MIN_HASH_PREIMAGE_LENGTH {
-        let nth = CircuitNum::from_fe_with_known_length(
-            cs.ns(|| format!("Fifth section:{}th", i)),
-            || Ok(F::from(i as u128)),
-            LENGTH_REPR_BIT_WIDTH,
-        )?;
-        let index_c = nth.get_num().sub(
-            cs.ns(|| format!("Fifth section:calculate index_c:{} - a_len - b_len", i)),
+    // seventh section (range decreasing: c:245-256)
+    assert!(MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH <= MAX_HASH_PREIMAGE_LENGTH);
+    for i in MAX_PREFIX_LENGTH + MAX_SECRET_LENGTH..MAX_HASH_PREIMAGE_LENGTH {
+        let index_c = AllocatedFr::constant(
+            cs.ns(|| format!("seventh section:{}th", i)),
+            F::from(i as u128),
+        )?.sub(
+            cs.ns(|| format!("seventh section:calculate index_c:{} - a_len - b_len", i)),
             a_add_b_length_cn.get_num(),
         )?;
         let selected_char = search_char(
-            cs.ns(|| {
+            cs.ns(||
                 format!(
-                    "Fifth section:{}th bit is the fifth section corresponding range",
+                    "seventh section:{}th bit is the seventh section corresponding range",
                     i
                 )
-            }),
+            ),
             c,
             &index_c,
-            0..MIN_SUFFIX_LENGTH,
-        )?;
-        selecting_string.push(selected_char);
-    }
-
-    // sixth section
-    for i in MIN_HASH_PREIMAGE_LENGTH..MAX_HASH_PREIMAGE_LENGTH {
-        let nth = CircuitNum::from_fe_with_known_length(
-            cs.ns(|| format!("sixth section:{}th", i)),
-            || Ok(F::from(i as u128)),
-            LENGTH_REPR_BIT_WIDTH,
-        )?;
-        let index_c = nth.get_num().sub(
-            cs.ns(|| format!("sixth section:calculate index_c:{} - a_len - b_len", i)),
-            a_add_b_length_cn.get_num(),
-        )?;
-        let selected_char = search_char(
-            cs.ns(|| {
-                format!(
-                    "sixth section:{}th bit is the sixth section corresponding range",
-                    i
-                )
-            }),
-            c,
-            &index_c,
-            MIN_HASH_PREIMAGE_LENGTH - MAX_PREFIX_LENGTH - MAX_SECRET_LENGTH
+            i - MAX_PREFIX_LENGTH
                 ..MAX_HASH_PREIMAGE_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH,
         )?;
         selecting_string.push(selected_char);
@@ -383,15 +460,15 @@ fn test_secret_circuit() {
     let secret = "christian.schneider@androidloves.me";
     let mut padding_message = "from:Christian Schneider Christian Schneider Christian Schneider <christian.schneider@androidloves.me>\r\nsubject:this is a test mail\r\ndate:Sat, 14 Mar 2020 21:48:57 +0100\r\nmessage-id:<4c2828df-2dae-74ff-2fa7-e6ac36100341@androidloves.me>\r\nto:mail@kmille.wtf\r\ncontent-type:text/plain; charset=utf-8; format=flowed\r\ncontent-transfer-encoding:7bit\r\ndkim-signature:v=1; a=rsa-sha256; c=relaxed/relaxed; d=androidloves.me; s=2019022801; t=1584218937; h=from:from:reply-to:subject:subject:date:date:message-id:message-id: to:to:cc:content-type:content-type: content-transfer-encoding:content-transfer-encoding; bh=aeLbTnlUQQv2UFEWKHeiL5Q0NjOwj4ktNSInk8rN/P0=; b=".to_string();
     padding_message.push_str(
-        &*padding.repeat(crate::params::MAX_HASH_PREIMAGE_LENGTH - padding_message.len()),
+        &*padding.repeat(MAX_HASH_PREIMAGE_LENGTH - padding_message.len()),
     );
 
     let (c, _) = crate::generate_circuit_instance(secret.to_string(), padding_message);
     c.generate_constraints(&mut cs).unwrap();
 
     println!("num_constraints: {}", cs.num_constraints());
-    println!("unconstrained: {}", cs.find_unconstrained());
-    if let Some(err) = cs.which_is_unsatisfied() {
-        panic!("error: {}", err);
-    }
+    //println!("unconstrained: {}", cs.find_unconstrained());
+    //if let Some(err) = cs.which_is_unsatisfied() {
+    //    panic!("error: {}", err);
+    //}
 }

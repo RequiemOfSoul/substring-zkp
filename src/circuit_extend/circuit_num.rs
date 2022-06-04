@@ -26,6 +26,20 @@ impl<F: PrimeField> CircuitNum<F> {
         CircuitNum::from_fr_with_known_length(cs.ns(|| "generate CircuitString"), num, max_length)
     }
 
+    pub fn from_fixed_fe_with_known_length<
+        Function: FnOnce() -> Result<F, SynthesisError>,
+        CS: ConstraintSystem<F>,
+    >(
+        mut cs: CS,
+        field_element: Function,
+        max_length: usize,
+    ) -> Result<Self, SynthesisError> {
+        assert!(max_length <= F::Params::MODULUS_BITS as usize);
+        let num = AllocatedFr::constant(cs.ns(|| "number from field element"), field_element()?)?;
+
+        CircuitNum::from_fr_with_known_length(cs.ns(|| "generate CircuitString"), num, max_length)
+    }
+
     pub fn from_fr_with_known_length<CS: ConstraintSystem<F>>(
         mut cs: CS,
         fr: AllocatedFr<F>,

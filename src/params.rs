@@ -1,13 +1,16 @@
-pub const MIN_PREFIX_LENGTH: usize = 64;
-pub const MAX_PREFIX_LENGTH: usize = 128;
+pub const MIN_PREFIX_LENGTH: usize = 5;
+pub const MAX_PREFIX_LENGTH: usize = 256;
 pub const PREFIX_FR_LENGTH: usize = MAX_PREFIX_LENGTH / 31 + 1; // If it's divisible without adding 1
 
 pub const MIN_SECRET_LENGTH: usize = 6;
-pub const MAX_SECRET_LENGTH: usize = 100;
+pub const MAX_SECRET_LENGTH: usize = 64;
 pub const SECRET_FR_LENGTH: usize = MAX_SECRET_LENGTH / 31 + 1; // If it's divisible without adding 1
 
-pub const MIN_SUFFIX_LENGTH: usize = 768;
-pub const MAX_SUFFIX_LENGTH: usize = 1024;
+pub const MIN_INTERNAL_LENGTH: usize = 64;
+pub const MAX_INTERNAL_LENGTH: usize = 480;
+
+pub const MIN_SUFFIX_LENGTH: usize = 64 + MIN_INTERNAL_LENGTH;
+pub const MAX_SUFFIX_LENGTH: usize = 768 + MAX_INTERNAL_LENGTH;
 
 // The suffix needs to be padded to MAX_HASH_PREIMAGE_LENGTH
 pub const PADDING_SUFFIX_LENGTH: usize =

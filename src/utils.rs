@@ -69,7 +69,7 @@ pub fn check_external_string_consistency<
                 if byte != *byte2 {
                     println!("{}th:{} {}", i, byte, *byte2);
                 }
-                assert_eq!(byte, *byte2, "char{} is not equals", i);
+                assert_eq!(byte, *byte2, "{}th byte is not equals", i);
             }
         });
 }
