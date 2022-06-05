@@ -21,7 +21,7 @@ pub fn generate_circuit_instance<F: PrimeField>(
     println!(
         "=========================================================\n\
         Please remember your private blind_factor:\n{:#}\n\
-        for protecting the privacy of the mailbox for later use\n\
+        to protect the privacy of the mailbox for later use\n\
         =========================================================",
         blind_factor.into_repr()
     );

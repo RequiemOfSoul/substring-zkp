@@ -41,7 +41,7 @@ impl<F: PrimeField> Default for SecretStringCircuit<F> {
             suffix_padding: vec![None; SUFFIX_FR_LENGTH],
             suffix_length: None,
             secret: vec![],
-            private_blind_factor: vec![None; F::Params::MODULUS_BITS as usize],
+            private_blind_factor: vec![None; F::Params::CAPACITY as usize],
             message: vec![None; MAX_HASH_PREIMAGE_FR_LENGTH],
             secret_hash: None,
             message_hash: None,
