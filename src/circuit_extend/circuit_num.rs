@@ -160,7 +160,7 @@ impl<F: PrimeField> CircuitNum<F> {
         self.get_num().get_variable()
     }
 
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.length
     }
 

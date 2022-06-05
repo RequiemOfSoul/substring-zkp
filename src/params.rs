@@ -10,7 +10,7 @@ pub const MIN_INTERNAL_LENGTH: usize = 64;
 pub const MAX_INTERNAL_LENGTH: usize = 480;
 
 pub const MIN_SUFFIX_LENGTH: usize = 64 + MIN_INTERNAL_LENGTH;
-pub const MAX_SUFFIX_LENGTH: usize = 0 + MAX_INTERNAL_LENGTH;
+pub const MAX_SUFFIX_LENGTH: usize = 768 + MAX_INTERNAL_LENGTH;
 
 // The suffix needs to be padded to MAX_HASH_PREIMAGE_LENGTH
 pub const PADDING_SUFFIX_LENGTH: usize =

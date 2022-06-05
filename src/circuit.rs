@@ -1,6 +1,12 @@
+#![allow(clippy::assertions_on_constants)]
 use crate::circuit_extend::{CircuitByte, CircuitString};
 use crate::circuit_extend::{CircuitNum, ExtendFunction};
-use crate::params::{LENGTH_REPR_BIT_WIDTH, MAX_HASH_PREIMAGE_BIT_WIDTH, MAX_HASH_PREIMAGE_FR_LENGTH, MAX_HASH_PREIMAGE_LENGTH, MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH, MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH, PREFIX_FR_LENGTH, SECRET_FR_LENGTH, SUFFIX_FR_LENGTH};
+use crate::params::{
+    LENGTH_REPR_BIT_WIDTH, MAX_HASH_PREIMAGE_BIT_WIDTH, MAX_HASH_PREIMAGE_FR_LENGTH,
+    MAX_HASH_PREIMAGE_LENGTH, MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH,
+    MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH, PREFIX_FR_LENGTH,
+    SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
+};
 use crate::utils::{check_external_string_consistency, pack_bits_to_element};
 use ark_ff::{FpParameters, PrimeField};
 use ckb_gadgets::algebra::boolean::{AllocatedBit, Boolean};
@@ -8,7 +14,7 @@ use ckb_gadgets::algebra::fr::AllocatedFr;
 use ckb_gadgets::hashes::sha256::sha256;
 use ckb_r1cs::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
 
-#[derive(Clone, Debug, )]
+#[derive(Clone, Debug)]
 pub struct SecretStringCircuit<F: PrimeField> {
     pub prefix_padding: Vec<Option<F>>,
     pub prefix_length: Option<F>,
@@ -25,20 +31,20 @@ pub struct SecretStringCircuit<F: PrimeField> {
     pub message_hash: Option<F>,
 }
 
-impl<F:PrimeField> Default for SecretStringCircuit<F>{
-    fn default() -> Self{
-        Self{
-            prefix_padding: vec![None;PREFIX_FR_LENGTH],
+impl<F: PrimeField> Default for SecretStringCircuit<F> {
+    fn default() -> Self {
+        Self {
+            prefix_padding: vec![None; PREFIX_FR_LENGTH],
             prefix_length: None,
-            secret_padding: vec![None;SECRET_FR_LENGTH],
+            secret_padding: vec![None; SECRET_FR_LENGTH],
             secret_length: None,
-            suffix_padding: vec![None;SUFFIX_FR_LENGTH],
+            suffix_padding: vec![None; SUFFIX_FR_LENGTH],
             suffix_length: None,
             secret: vec![],
             private_blind_factor: vec![None; F::Params::MODULUS_BITS as usize],
-            message: vec![None;MAX_HASH_PREIMAGE_FR_LENGTH],
+            message: vec![None; MAX_HASH_PREIMAGE_FR_LENGTH],
             secret_hash: None,
-            message_hash: None
+            message_hash: None,
         }
     }
 }
@@ -55,10 +61,11 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         let message_commitment = AllocatedFr::alloc(cs.ns(|| "signed message commitment"), || {
             self.message_hash.ok_or(SynthesisError::AssignmentMissing)
         })?;
-        let blind_factor_be_bits = self.private_blind_factor
+        let blind_factor_be_bits = self
+            .private_blind_factor
             .iter()
             .enumerate()
-            .map(|(i, bit)|AllocatedBit::alloc(cs.ns(||format!("alloc {}th bit", i)), *bit))
+            .map(|(i, bit)| AllocatedBit::alloc(cs.ns(|| format!("alloc {}th bit", i)), *bit))
             .collect::<Result<Vec<_>, _>>()?;
 
         let secret = CircuitString::from_string_witness_with_fixed_length(
@@ -91,10 +98,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
             &suffix,
         )?;
         check_external_string_consistency(
-            (
-                signed_message_bytes.iter(),
-                self.message.iter(),
-            ),
+            (signed_message_bytes.iter(), self.message.iter()),
             (&prefix, self.prefix_length.as_ref()),
             (&secret, self.secret_length.as_ref()),
             (&suffix, self.suffix_length.as_ref()),
@@ -263,8 +267,13 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
     }
 
     // fourth section (range increasing: c:6-128, fixed range:a, b)
-    assert!(MIN_PREFIX_LENGTH + MAX_SECRET_LENGTH <= MIN_PREFIX_LENGTH + MIN_PREFIX_LENGTH + MIN_SUFFIX_LENGTH);
-    for i in MIN_PREFIX_LENGTH + MAX_SECRET_LENGTH..MIN_PREFIX_LENGTH + MIN_PREFIX_LENGTH + MIN_SUFFIX_LENGTH {
+    assert!(
+        MIN_PREFIX_LENGTH + MAX_SECRET_LENGTH
+            <= MIN_PREFIX_LENGTH + MIN_PREFIX_LENGTH + MIN_SUFFIX_LENGTH
+    );
+    for i in MIN_PREFIX_LENGTH + MAX_SECRET_LENGTH
+        ..MIN_PREFIX_LENGTH + MIN_PREFIX_LENGTH + MIN_SUFFIX_LENGTH
+    {
         let nth = CircuitNum::from_fixed_fe_with_known_length(
             cs.ns(|| format!("fourth section:{}th", i)),
             || Ok(F::from(i as u128)),
@@ -406,12 +415,12 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
             0..i - MIN_PREFIX_LENGTH + MIN_SECRET_LENGTH,
         )?;
         let selected_char = CircuitByte::select_ifle_with_unchecked(
-            cs.ns(||
+            cs.ns(|| {
                 format!(
                     "sixth section:{}th bit is the sixth section corresponding range",
                     i
                 )
-            ),
+            }),
             &searched_b_char,
             &searched_c_char,
             &nth,
@@ -426,21 +435,21 @@ fn calculate_correct_preimage<F: PrimeField, CS: ConstraintSystem<F>>(
         let index_c = AllocatedFr::constant(
             cs.ns(|| format!("seventh section:{}th", i)),
             F::from(i as u128),
-        )?.sub(
+        )?
+        .sub(
             cs.ns(|| format!("seventh section:calculate index_c:{} - a_len - b_len", i)),
             a_add_b_length_cn.get_num(),
         )?;
         let selected_char = search_char(
-            cs.ns(||
+            cs.ns(|| {
                 format!(
                     "seventh section:{}th bit is the seventh section corresponding range",
                     i
                 )
-            ),
+            }),
             c,
             &index_c,
-            i - MAX_PREFIX_LENGTH
-                ..MAX_HASH_PREIMAGE_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH,
+            i - MAX_PREFIX_LENGTH..MAX_HASH_PREIMAGE_LENGTH - MIN_PREFIX_LENGTH - MIN_SECRET_LENGTH,
         )?;
         selecting_string.push(selected_char);
     }
@@ -479,9 +488,7 @@ fn test_secret_circuit() {
     let padding = "0"; // must be single char, or else fill it to MAX_HASH_PREIMAGE_LENGTH
     let secret = "christian.schneider@androidloves.me";
     let mut padding_message = "from:Christian Schneider Christian Schneider Christian Schneider <christian.schneider@androidloves.me>\r\nsubject:this is a test mail\r\ndate:Sat, 14 Mar 2020 21:48:57 +0100\r\nmessage-id:<4c2828df-2dae-74ff-2fa7-e6ac36100341@androidloves.me>\r\nto:mail@kmille.wtf\r\ncontent-type:text/plain; charset=utf-8; format=flowed\r\ncontent-transfer-encoding:7bit\r\ndkim-signature:v=1; a=rsa-sha256; c=relaxed/relaxed; d=androidloves.me; s=2019022801; t=1584218937; h=from:from:reply-to:subject:subject:date:date:message-id:message-id: to:to:cc:content-type:content-type: content-transfer-encoding:content-transfer-encoding; bh=aeLbTnlUQQv2UFEWKHeiL5Q0NjOwj4ktNSInk8rN/P0=; b=".to_string();
-    padding_message.push_str(
-        &*padding.repeat(MAX_HASH_PREIMAGE_LENGTH - padding_message.len()),
-    );
+    padding_message.push_str(&*padding.repeat(MAX_HASH_PREIMAGE_LENGTH - padding_message.len()));
 
     let (c, _) = crate::generate_circuit_instance(secret.to_string(), padding_message, None);
     c.generate_constraints(&mut cs).unwrap();
@@ -489,6 +496,6 @@ fn test_secret_circuit() {
     println!("num_constraints: {}", cs.num_constraints());
     println!("unconstrained: {}", cs.find_unconstrained());
     if let Some(err) = cs.which_is_unsatisfied() {
-       panic!("error: {}", err);
+        panic!("error: {}", err);
     }
 }

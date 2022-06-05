@@ -9,6 +9,13 @@ use core::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write;
 
+type Constraints<F> = Vec<(
+    LinearCombination<F>,
+    LinearCombination<F>,
+    LinearCombination<F>,
+    String,
+)>;
+
 #[derive(Debug)]
 enum NamedObject {
     Constraint(usize),
@@ -20,14 +27,15 @@ enum NamedObject {
 pub struct TestConstraintSystem<F: PrimeField> {
     named_objects: HashMap<String, NamedObject>,
     current_namespace: Vec<String>,
-    constraints: Vec<(
-        LinearCombination<F>,
-        LinearCombination<F>,
-        LinearCombination<F>,
-        String,
-    )>,
+    constraints: Constraints<F>,
     inputs: Vec<(F, String)>,
     aux: Vec<(F, String)>,
+}
+
+impl<F: PrimeField> Default for TestConstraintSystem<F> {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 #[derive(Clone, Copy)]

@@ -13,13 +13,16 @@ use ckb_r1cs::{ConstraintSystem, LinearCombination, SynthesisError};
 pub fn generate_circuit_instance<F: PrimeField>(
     secret: String,
     message: String,
-    private_blind_factor: Option<F>
+    private_blind_factor: Option<F>,
 ) -> (SecretStringCircuit<F>, Vec<F>) {
     assert!(MIN_SECRET_LENGTH <= secret.len() && secret.len() <= MAX_SECRET_LENGTH);
     assert!(MIN_HASH_PREIMAGE_LENGTH <= message.len() && message.len() <= MAX_HASH_PREIMAGE_LENGTH);
-    let blind_factor = private_blind_factor.unwrap_or_else(||F::rand(&mut ark_std::test_rng()));
-    println!("Please remember your private blind_factor:{:#}, \
-        \nfor protecting the privacy of the mailbox for future use",blind_factor);
+    let blind_factor = private_blind_factor.unwrap_or_else(|| F::rand(&mut ark_std::test_rng()));
+    println!(
+        "Please remember your private blind_factor:{:#}, \
+        \nfor protecting the privacy of the mailbox for future use",
+        blind_factor
+    );
 
     let secret_witness = SecretWitness::<F>::generate_witness(secret, message, blind_factor);
 
@@ -82,14 +85,13 @@ pub fn transform_public_input(input: Vec<Vec<u8>>) -> Vec<Fr> {
     input
         .iter()
         .flatten()
-        .map(|byte| {
+        .flat_map(|byte| {
             let mut v = Vec::with_capacity(8);
             (0..8)
                 .rev()
                 .for_each(|i| v.push(Fr::from((byte >> i) & 1u8 == 1u8)));
             v
         })
-        .flatten()
         .collect()
 }
 

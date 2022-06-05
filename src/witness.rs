@@ -34,9 +34,10 @@ impl<F: PrimeField> SecretWitness<F> {
             .to_string()
             .into_bytes();
 
-
-        let mut secret_witness = SecretWitness::default();
-        secret_witness.private_blind_factor = blind_factor;
+        let mut secret_witness = SecretWitness {
+            private_blind_factor: blind_factor,
+            ..Default::default()
+        };
         secret_witness
             .absorb_prefix(&prefix)
             .absorb_secret(secret.as_bytes())
@@ -48,7 +49,11 @@ impl<F: PrimeField> SecretWitness<F> {
 
     pub fn into_circuit_instance(self) -> SecretStringCircuit<F> {
         let mut bits = Vec::with_capacity(F::Params::CAPACITY as usize);
-        append_be_fixed_width(&mut bits, &self.private_blind_factor, F::Params::CAPACITY as usize);
+        append_be_fixed_width(
+            &mut bits,
+            &self.private_blind_factor,
+            F::Params::CAPACITY as usize,
+        );
         SecretStringCircuit {
             prefix_padding: self.prefix.0.into_iter().map(Some).collect(),
             prefix_length: Some(F::from(self.prefix.1 as u128)),
@@ -140,7 +145,9 @@ impl<F: PrimeField> SecretWitness<F> {
     fn finalize_hash(&mut self, secret: Vec<u8>, message: Vec<u8>) {
         let blind_factor = {
             let mut bytes = Vec::new();
-            self.private_blind_factor.write(&mut bytes).expect("write fail");
+            self.private_blind_factor
+                .write(&mut bytes)
+                .expect("write fail");
             bytes.reverse();
             bytes
         };
