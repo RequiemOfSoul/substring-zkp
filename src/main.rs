@@ -7,8 +7,8 @@ use ark_bn254::Bn254 as E;
 use ckb_groth16::{
     create_random_proof, generate_random_parameters, verifier::prepare_verifying_key, verify_proof,
 };
-use substring_zkp::{params, utils::generate_circuit_instance};
 use substring_zkp::circuit::SecretStringCircuit;
+use substring_zkp::{params, utils::generate_circuit_instance};
 
 fn main() {
     let rng = &mut test_rng();

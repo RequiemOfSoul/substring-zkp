@@ -19,9 +19,11 @@ pub fn generate_circuit_instance<F: PrimeField>(
     assert!(MIN_HASH_PREIMAGE_LENGTH <= message.len() && message.len() <= MAX_HASH_PREIMAGE_LENGTH);
     let blind_factor = private_blind_factor.unwrap_or_else(|| F::rand(&mut ark_std::test_rng()));
     println!(
-        "Please remember your private blind_factor:{:#}, \
-        \nfor protecting the privacy of the mailbox for future use",
-        blind_factor
+        "=========================================================\n\
+        Please remember your private blind_factor:\n{:#}\n\
+        for protecting the privacy of the mailbox for later use\n\
+        =========================================================",
+        blind_factor.into_repr()
     );
 
     let secret_witness = SecretWitness::<F>::generate_witness(secret, message, blind_factor);
