@@ -13,11 +13,15 @@ use ckb_r1cs::{ConstraintSystem, LinearCombination, SynthesisError};
 pub fn generate_circuit_instance<F: PrimeField>(
     secret: String,
     message: String,
+    private_blind_factor: Option<F>
 ) -> (SecretStringCircuit<F>, Vec<F>) {
     assert!(MIN_SECRET_LENGTH <= secret.len() && secret.len() <= MAX_SECRET_LENGTH);
     assert!(MIN_HASH_PREIMAGE_LENGTH <= message.len() && message.len() <= MAX_HASH_PREIMAGE_LENGTH);
+    let blind_factor = private_blind_factor.unwrap_or_else(||F::rand(&mut ark_std::test_rng()));
+    println!("Please remember your private blind_factor:{:#}, \
+        \nfor protecting the privacy of the mailbox for future use",blind_factor);
 
-    let secret_witness = SecretWitness::<F>::generate_witness(secret, message);
+    let secret_witness = SecretWitness::<F>::generate_witness(secret, message, blind_factor);
 
     let public_input = secret_witness.get_public_input();
     let circuit = secret_witness.into_circuit_instance();
@@ -30,7 +34,7 @@ pub fn check_external_string_consistency<
     'b,
     F: PrimeField,
     U: Iterator<Item = &'a CircuitByte<F>>,
-    T: Iterator<Item = &'b F>,
+    T: Iterator<Item = &'b Option<F>>,
 >(
     (message, external_message): (U, T),
     (prefix, prefix_length): (&CircuitString<F>, Option<&F>),
@@ -65,7 +69,7 @@ pub fn check_external_string_consistency<
         .zip(external_message)
         .enumerate()
         .for_each(|(i, (byte1, byte2))| {
-            if let Some(byte) = byte1.get_num().get_value() {
+            if let (Some(byte), Some(byte2)) = (byte1.get_num().get_value(), byte2) {
                 if byte != *byte2 {
                     println!("{}th:{} {}", i, byte, *byte2);
                 }

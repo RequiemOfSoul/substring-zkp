@@ -19,18 +19,19 @@ pub struct CircuitString<F: PrimeField> {
 impl<F: PrimeField> CircuitString<F> {
     pub fn from_string_witness_with_fixed_length<CS: ConstraintSystem<F>>(
         mut cs: CS,
-        string_witness: &[F],
+        string_witness: &[Option<F>],
         max_length: usize,
     ) -> Result<Self, SynthesisError> {
+        let byte_cap = (F::Params::CAPACITY / 8) as usize;
         assert!(
-            (string_witness.len() - 1) * 31 <= max_length
-                && max_length <= string_witness.len() * 31,
+            (string_witness.len() - 1) * byte_cap <= max_length
+                && max_length <= string_witness.len() * byte_cap,
             "string witness padding error"
         );
-        let split_length = if max_length % 31 == 0 {
-            max_length / 31
+        let split_length = if max_length % byte_cap == 0 {
+            max_length / byte_cap
         } else {
-            max_length / 31 + 1
+            max_length / byte_cap + 1
         };
 
         let mut packed_nums = Vec::with_capacity(split_length);
@@ -40,8 +41,8 @@ impl<F: PrimeField> CircuitString<F> {
         for (i, split_fe) in string_witness.iter().enumerate() {
             let packed_split = CircuitNum::from_fe_with_known_length(
                 cs.ns(|| format!("packed {}th section Fr", i)),
-                || Ok(*split_fe),
-                248,
+                || split_fe.ok_or(SynthesisError::AssignmentMissing),
+                byte_cap * 8,
             )?;
             for (j, bits) in packed_split.get_bits_le().chunks_exact(8).enumerate() {
                 calculate_ascii_char(

@@ -1,30 +1,46 @@
 use crate::circuit_extend::{CircuitByte, CircuitString};
 use crate::circuit_extend::{CircuitNum, ExtendFunction};
-use crate::params::{
-    LENGTH_REPR_BIT_WIDTH, MAX_HASH_PREIMAGE_BIT_WIDTH, MAX_HASH_PREIMAGE_LENGTH,
-    MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH,
-    MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH,
-};
+use crate::params::{LENGTH_REPR_BIT_WIDTH, MAX_HASH_PREIMAGE_BIT_WIDTH, MAX_HASH_PREIMAGE_FR_LENGTH, MAX_HASH_PREIMAGE_LENGTH, MAX_PREFIX_LENGTH, MAX_SECRET_LENGTH, MIN_PREFIX_LENGTH, MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH, PREFIX_FR_LENGTH, SECRET_FR_LENGTH, SUFFIX_FR_LENGTH};
 use crate::utils::{check_external_string_consistency, pack_bits_to_element};
 use ark_ff::{FpParameters, PrimeField};
+use ckb_gadgets::algebra::boolean::{AllocatedBit, Boolean};
 use ckb_gadgets::algebra::fr::AllocatedFr;
 use ckb_gadgets::hashes::sha256::sha256;
 use ckb_r1cs::{ConstraintSynthesizer, ConstraintSystem, SynthesisError};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, )]
 pub struct SecretStringCircuit<F: PrimeField> {
-    pub prefix_padding: Option<Vec<F>>,
+    pub prefix_padding: Vec<Option<F>>,
     pub prefix_length: Option<F>,
-    pub secret_padding: Option<Vec<F>>,
+    pub secret_padding: Vec<Option<F>>,
     pub secret_length: Option<F>,
-    pub suffix_padding: Option<Vec<F>>,
+    pub suffix_padding: Vec<Option<F>>,
     pub suffix_length: Option<F>, // need assert!
 
-    pub secret: Option<Vec<F>>,
-    pub message: Option<Vec<F>>,
+    pub secret: Vec<Option<F>>,
+    pub private_blind_factor: Vec<Option<bool>>,
+    pub message: Vec<Option<F>>,
 
     pub secret_hash: Option<F>,
     pub message_hash: Option<F>,
+}
+
+impl<F:PrimeField> Default for SecretStringCircuit<F>{
+    fn default() -> Self{
+        Self{
+            prefix_padding: vec![None;PREFIX_FR_LENGTH],
+            prefix_length: None,
+            secret_padding: vec![None;SECRET_FR_LENGTH],
+            secret_length: None,
+            suffix_padding: vec![None;SUFFIX_FR_LENGTH],
+            suffix_length: None,
+            secret: vec![],
+            private_blind_factor: vec![None; F::Params::MODULUS_BITS as usize],
+            message: vec![None;MAX_HASH_PREIMAGE_FR_LENGTH],
+            secret_hash: None,
+            message_hash: None
+        }
+    }
 }
 
 impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
@@ -39,31 +55,35 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         let message_commitment = AllocatedFr::alloc(cs.ns(|| "signed message commitment"), || {
             self.message_hash.ok_or(SynthesisError::AssignmentMissing)
         })?;
+        let blind_factor_be_bits = self.private_blind_factor
+            .iter()
+            .enumerate()
+            .map(|(i, bit)|AllocatedBit::alloc(cs.ns(||format!("alloc {}th bit", i)), *bit))
+            .collect::<Result<Vec<_>, _>>()?;
 
         let secret = CircuitString::from_string_witness_with_fixed_length(
             cs.ns(|| "convert secret string witness to CircuitString"),
-            &self
-                .secret_padding
-                .ok_or(SynthesisError::AssignmentMissing)?,
+            &self.secret_padding,
             MAX_SECRET_LENGTH,
         )?;
         let prefix = CircuitString::from_string_witness_with_fixed_length(
             cs.ns(|| "convert prefix string witness to CircuitString"),
-            &self
-                .prefix_padding
-                .ok_or(SynthesisError::AssignmentMissing)?,
+            &self.prefix_padding,
             MAX_PREFIX_LENGTH,
         )?;
         let suffix = CircuitString::from_string_witness_with_fixed_length(
             cs.ns(|| "convert suffix string witness to CircuitString"),
-            &self
-                .suffix_padding
-                .ok_or(SynthesisError::AssignmentMissing)?,
+            &self.suffix_padding,
             PADDING_SUFFIX_LENGTH,
         )?;
 
         // get secret hash preimage
-        let secret_bits = secret.get_bits_be();
+        let mut secret_bits = secret.get_bits_be();
+        secret_bits.push(Boolean::constant(false));
+        secret_bits.push(Boolean::constant(false));
+        secret_bits.push(Boolean::constant(false));
+        secret_bits.extend(blind_factor_be_bits.into_iter().map(Boolean::from));
+
         let mut signed_message_bytes = calculate_correct_preimage(
             cs.ns(|| "calculate correct preimage"),
             &prefix,
@@ -73,7 +93,7 @@ impl<F: PrimeField> ConstraintSynthesizer<F> for SecretStringCircuit<F> {
         check_external_string_consistency(
             (
                 signed_message_bytes.iter(),
-                self.message.as_ref().unwrap().iter(),
+                self.message.iter(),
             ),
             (&prefix, self.prefix_length.as_ref()),
             (&secret, self.secret_length.as_ref()),
@@ -463,12 +483,12 @@ fn test_secret_circuit() {
         &*padding.repeat(MAX_HASH_PREIMAGE_LENGTH - padding_message.len()),
     );
 
-    let (c, _) = crate::generate_circuit_instance(secret.to_string(), padding_message);
+    let (c, _) = crate::generate_circuit_instance(secret.to_string(), padding_message, None);
     c.generate_constraints(&mut cs).unwrap();
 
     println!("num_constraints: {}", cs.num_constraints());
-    //println!("unconstrained: {}", cs.find_unconstrained());
-    //if let Some(err) = cs.which_is_unsatisfied() {
-    //    panic!("error: {}", err);
-    //}
+    println!("unconstrained: {}", cs.find_unconstrained());
+    if let Some(err) = cs.which_is_unsatisfied() {
+       panic!("error: {}", err);
+    }
 }

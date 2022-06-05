@@ -13,6 +13,7 @@ ark-ff = { version = "0.2", default-features = false }
 ark-serialize = { version = "0.2", default-features = false, features = [ "derive" ] }
 ark-bls12-381 = { version = "0.2", default-features = false, features = [ "curve" ] }
 ark-bn254 = { version = "0.2", default-features = false, features = [ "curve" ] }
+ark-std = { version = "0.2.0", default-features = false}
 sha2 = "0.9"
 
 #ark-std = { version = "^0.3.0", default-features = false }
@@ -23,9 +24,8 @@ rand = { version = "0.7", default-features = false }
 byteorder = { version = "1.4", default-features = false }
 blake2s_simd = "0.5"
 
-[dependencies.ark-std]
-version = "0.2.0"
-default-features = false
+[dev-dependencies]
+criterion = "0.3.0"
 
 [[bin]]
 name = "substring"
@@ -35,3 +35,7 @@ path = "src/main.rs"
 name = "substring_zkp"
 path = "src/lib.rs"
 
+[[bench]]
+name = "criterion"
+harness = false
+path = "benches/benchmark.rs"

@@ -4,7 +4,7 @@ use crate::params::{
     MIN_SECRET_LENGTH, MIN_SUFFIX_LENGTH, PADDING_SUFFIX_LENGTH, PREFIX_FR_LENGTH,
     SECRET_FR_LENGTH, SUFFIX_FR_LENGTH,
 };
-use ark_ff::{BitIteratorBE, PrimeField};
+use ark_ff::{BitIteratorBE, FpParameters, PrimeField};
 #[allow(clippy::useless_attribute)]
 use sha2::{Digest, Sha256};
 
@@ -14,13 +14,14 @@ pub struct SecretWitness<F: PrimeField> {
     prefix: (Vec<F>, usize),
     secret: (Vec<F>, usize),
     suffix: (Vec<F>, usize),
+    private_blind_factor: F,
     message_bytes: Vec<F>,
     pub secret_commitment: Option<F>,
     pub message_hash: Option<F>,
 }
 
 impl<F: PrimeField> SecretWitness<F> {
-    pub fn generate_witness(secret: String, message: String) -> SecretWitness<F> {
+    pub fn generate_witness(secret: String, message: String, blind_factor: F) -> SecretWitness<F> {
         let split_message = message.split(&secret).collect::<Vec<&str>>();
         let prefix = split_message
             .first()
@@ -33,7 +34,9 @@ impl<F: PrimeField> SecretWitness<F> {
             .to_string()
             .into_bytes();
 
+
         let mut secret_witness = SecretWitness::default();
+        secret_witness.private_blind_factor = blind_factor;
         secret_witness
             .absorb_prefix(&prefix)
             .absorb_secret(secret.as_bytes())
@@ -44,15 +47,18 @@ impl<F: PrimeField> SecretWitness<F> {
     }
 
     pub fn into_circuit_instance(self) -> SecretStringCircuit<F> {
+        let mut bits = Vec::with_capacity(F::Params::CAPACITY as usize);
+        append_be_fixed_width(&mut bits, &self.private_blind_factor, F::Params::CAPACITY as usize);
         SecretStringCircuit {
-            prefix_padding: Some(self.prefix.0),
+            prefix_padding: self.prefix.0.into_iter().map(Some).collect(),
             prefix_length: Some(F::from(self.prefix.1 as u128)),
-            secret_padding: Some(self.secret.0),
+            secret_padding: self.secret.0.into_iter().map(Some).collect(),
             secret_length: Some(F::from(self.secret.1 as u128)),
-            suffix_padding: Some(self.suffix.0),
+            suffix_padding: self.suffix.0.into_iter().map(Some).collect(),
             suffix_length: Some(F::from(self.suffix.1 as u128)),
-            secret: None,
-            message: Some(self.message_bytes),
+            secret: vec![],
+            private_blind_factor: bits.into_iter().map(Some).collect(),
+            message: self.message_bytes.into_iter().map(Some).collect(),
             secret_hash: self.secret_commitment,
             message_hash: self.message_hash,
         }
@@ -86,6 +92,7 @@ impl<F: PrimeField> Default for SecretWitness<F> {
             prefix: (vec![Default::default(); PREFIX_FR_LENGTH], 0),
             secret: (vec![Default::default(); SECRET_FR_LENGTH], 0),
             suffix: (vec![Default::default(); SUFFIX_FR_LENGTH], 0),
+            private_blind_factor: Default::default(),
             message_bytes: vec![Default::default(); MAX_HASH_PREIMAGE_LENGTH],
             secret_commitment: None,
             message_hash: None,
@@ -131,8 +138,16 @@ impl<F: PrimeField> SecretWitness<F> {
     }
 
     fn finalize_hash(&mut self, secret: Vec<u8>, message: Vec<u8>) {
+        let blind_factor = {
+            let mut bytes = Vec::new();
+            self.private_blind_factor.write(&mut bytes).expect("write fail");
+            bytes.reverse();
+            bytes
+        };
+
         let mut secret_padding = secret;
         secret_padding.resize(SECRET_FR_LENGTH * 31, 0);
+        secret_padding.extend(blind_factor);
 
         let mut h = Sha256::new();
         h.update(&secret_padding);
@@ -191,6 +206,3 @@ pub fn append_be_fixed_width<F: PrimeField>(content: &mut Vec<bool>, x: &F, widt
     bits.reverse();
     content.extend(bits);
 }
-
-#[test]
-fn test_secret_witness() {}
